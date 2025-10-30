@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from "react";
+import { useOrders } from './features/orders/hooks/useOrders';
 import TrackingPage from './pages/TrackingPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import DeliveryStatusPage from './pages/DeliveryStatusPage';
@@ -16,6 +17,7 @@ import { startListeningToNewLocations } from "./utils/firebase-listener";
 
 function App() {
   const { isLoggedIn, username, isAuthenticated } = useAuth();
+  const { serviceFee } = useOrders();
 
   useEffect(() => {
     // Inicializar listeners do Firebase
@@ -43,7 +45,7 @@ function App() {
         <Route path="/cozinha" element={<KitchenDisplayPage />} />
         <Route path="/comanda/:comandaId" element={<ComandaPage />} />
         <Route path="/comandas" element={<ComandaHistoryPage />} />
-        <Route path="/salao" element={<WaiterPage />} />
+        <Route path="/salao" element={<WaiterPage serviceFee={serviceFee} />} />
         <Route path="/delivery-status/:trackingCode" element={<DeliveryStatusPage />} />
         <Route 
           path="/location" 

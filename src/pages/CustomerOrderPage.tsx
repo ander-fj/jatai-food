@@ -354,7 +354,7 @@ const CustomerOrderPage: React.FC = () => {
   const getTotalPrice = () => {
     const subtotal = getSubtotal();
     const discount = getDiscount();
-    const totalWithFee = subtotal - discount + deliveryFee;
+    const totalWithFee = subtotal - discount + (deliveryFee || 0);
     return Math.max(0, totalWithFee);
   };
 
@@ -1690,6 +1690,10 @@ const CustomerOrderPage: React.FC = () => {
                           <span>-{formatCurrency(getDiscount())}</span>
                         </div>
                       )}
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Taxa de Entrega ({deliveryFee}%):</span>
+                        <span>+ {formatCurrency(getSubtotal() * (deliveryFee / 100))}</span>
+                      </div>
                       <div className="flex justify-between font-bold text-lg border-t pt-1">
                         <span>Total:</span>
                         <span className="text-red-600">{formatCurrency(getTotalPrice())}</span>

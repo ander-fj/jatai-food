@@ -738,6 +738,15 @@ const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> = ({
                         <p className="text-xs text-gray-500 mt-1">Taxa percentual aplicada sobre o valor total do pedido para entregas.</p>
                       </div>
                     </div>
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={saveFeesConfig}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                      >
+                        <Save className="h-4 w-4" />
+                        Salvar Taxas
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

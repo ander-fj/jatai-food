@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { useState, useEffect } from 'react';
-import { Order, NewOrder, DeliveryPerson } from '../types';
+import { Order, NewOrder, DeliveryPerson, PaymentMethod } from '../types';
 import { useMenu } from './useMenu';
 import { getDatabase, ref, onValue, set, push, update, get } from "firebase/database";
 import { getTenantRef, getCurrentTenantId, initializeTenant } from '../../../config/firebase'; // Import getCurrentTenantId from config/firebase
 import { storage } from '../../../config/firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useGoogleMapsGeocoding } from '../../../hooks/useGoogleMaps';
+
 
 export const useOrders = () => {
   const { pizzaFlavors, beverages } = useMenu();
@@ -32,15 +33,6 @@ export const useOrders = () => {
     window.addEventListener('fees-updated', handleFeesUpdate);
 
     try {
-      // Try to load fees from localStorage first
-      const cachedFees = localStorage.getItem('app-fees');
-      if (cachedFees) {
-        const { serviceFee, deliveryFee } = JSON.parse(cachedFees);
-        setServiceFee(serviceFee);
-        setDeliveryFee(deliveryFee);
-        console.log('💰 Loaded fees from localStorage');
-      }
-
       const currentTenantId = getCurrentTenantId();
       if (!currentTenantId) {
         console.error("Tenant ID is not available.");
@@ -48,6 +40,27 @@ export const useOrders = () => {
       }
 
       console.log(`🏢 useOrders: Loading data for tenant: ${currentTenantId}`);
+
+      // Carregar taxas do Firebase e salvar localmente
+      const feesConfigRef = getTenantRef('config/fees');
+      const unsubscribeFees = onValue(feesConfigRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const fees = {
+            serviceFee: data.serviceFee || 0,
+            deliveryFee: data.deliveryFee || 0,
+          };
+          setServiceFee(fees.serviceFee);
+          setDeliveryFee(fees.deliveryFee);
+          localStorage.setItem('app-fees', JSON.stringify(fees));
+          console.log('💰 Fees loaded from Firebase and saved to localStorage:', fees);
+        } else {
+          // Se não houver nada no Firebase, carrega do localStorage (se existir)
+          handleFeesUpdate();
+        }
+      }, (error) => {
+        console.error(`🔥 Firebase error loading fees for tenant ${currentTenantId}:`, error);
+      });
 
       const ordersRef = getTenantRef('orders');
       const unsubscribeOrders = onValue(ordersRef, (snapshot) => {
@@ -83,6 +96,7 @@ export const useOrders = () => {
 
       return () => {
         unsubscribeOrders();
+        unsubscribeFees();
         unsubscribeEquipe();
         window.removeEventListener('fees-updated', handleFeesUpdate);
       };
@@ -248,25 +262,28 @@ export const useOrders = () => {
       })
     ].filter(Boolean); // Remover itens nulos (incompletos)
 
-    let total = items.reduce((sum, item) => sum + item.price, 0);
+    const subtotal = items.reduce((sum, item) => sum + (item.price || 0), 0);
+    let total = subtotal;
     let serviceFeeApplied = 0;
     let deliveryFeeApplied = 0;
 
-    // Garante que pedidos de mesa sejam identificados como "Consumo no local"
+    // Garante que pedidos de mesa (com tableNumber) sejam identificados como "Consumo no local"
     if (newOrderData.tableNumber) {
       console.log('📦 Pedido de mesa detectado, definindo endereço para "Consumo no local".');
       newOrderData.address = 'Consumo no local';
     }
 
-    // Aplicar taxas com os valores do estado (que vêm do Firebase/localStorage)
+    // Aplicar taxas com base no tipo de pedido
     if (newOrderData.tableNumber) {
       // Pedido de salão: aplicar taxa de serviço
-      serviceFeeApplied = total * (serviceFee / 100); // Usar a taxa de serviço do estado
+      serviceFeeApplied = subtotal * (serviceFee / 100);
       total += serviceFeeApplied;
-    } else {
-      // Outros pedidos (delivery/retirada): aplicar taxa de entrega
-      deliveryFeeApplied = total * (deliveryFee / 100); // Usar a taxa de entrega do estado
+      console.log(`💲 Taxa de serviço de ${serviceFee}% aplicada: ${serviceFeeApplied.toFixed(2)}`);
+    } else if (newOrderData.address && newOrderData.address.toLowerCase() !== 'retirada') {
+      // Pedido de entrega (não é retirada): aplicar taxa de entrega percentual
+      deliveryFeeApplied = subtotal * (deliveryFee / 100);
       total += deliveryFeeApplied;
+      console.log(`🚚 Taxa de entrega de ${deliveryFee}% aplicada: ${deliveryFeeApplied.toFixed(2)}`);
     }
 
     console.log(`Tentando geocodificar endereço: ${newOrderData.address}`);

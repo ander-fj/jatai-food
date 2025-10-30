@@ -110,12 +110,6 @@ const OrderCard: React.FC<OrderCardProps> = ({
   const pizzas = (order.items || []).filter(item => item.name.toLowerCase().includes('pizza'));
   const beverages = (order.items || []).filter(item => !item.name.toLowerCase().includes('pizza'));
 
-  // Calcular o total real somando os preços dos itens
-  const calculateOrderTotal = () => {
-    return (order.items || []).reduce((total, item) => total + (item.price || 0), 0);
-  };
-
-  const actualTotal = calculateOrderTotal();
 
   const handleDeliveryPersonConfirm = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -163,7 +157,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <div className="text-lg font-bold text-green-600">
-              R$ {formatCurrency(actualTotal)}
+              R$ {formatCurrency(order.total)}
             </div>
             <button
               onClick={(e) => {
@@ -238,7 +232,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
             </button>
           </div>
           <div className="text-xl font-bold text-green-600 bg-green-50 px-3 py-1 rounded-lg border border-green-200">
-            R$ {formatCurrency(actualTotal)}
+            R$ {formatCurrency(order.total)}
           </div>
         </div>
       </div>
@@ -424,9 +418,21 @@ const OrderCard: React.FC<OrderCardProps> = ({
           </div>
 
           <div className="mt-3 pt-3 border-t border-gray-100">
-            <div className="flex justify-between text-sm font-medium">
-              <span className="text-gray-600">Total</span>
-              <span>R$ {formatCurrency(actualTotal)}</span>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Subtotal</span>
+                <span>{formatCurrency(order.total - (order.serviceFeeApplied || 0) - (order.deliveryFeeApplied || 0))}</span>
+              </div>
+              {(order.deliveryFeeApplied || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Taxa de Entrega</span>
+                  <span>+ {formatCurrency(order.deliveryFeeApplied || 0)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-base pt-1 border-t">
+                <span>Total</span>
+                <span>{formatCurrency(order.total)}</span>
+              </div>
             </div>
           </div>
         </div>

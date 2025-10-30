@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { X, Plus, Pencil, Trash2 } from 'lucide-react';
-import { NewOrder, Pizza, Beverage, Order } from '../types';
+import { X, Plus, Pencil, Trash2, Truck } from 'lucide-react';
+import { NewOrder, Order } from '../types';
 import NewFlavorModal from './NewFlavorModal';
 import NewBeverageModal from './NewBeverageModal';
 import { useMenu } from '../hooks/useMenu';
@@ -89,7 +89,7 @@ const NewOrderModal: React.FC<NewOrderModalProps> = ({
     if (isSalonOrder) {
       return subtotal * (serviceFee / 100);
     }
-    return deliveryFee;
+    return subtotal * (deliveryFee / 100);
   }, [isSalonOrder, subtotal, serviceFee, deliveryFee]);
 
   const total = useMemo(() => subtotal + fee, [subtotal, fee]);
@@ -631,7 +631,10 @@ const NewOrderModal: React.FC<NewOrderModalProps> = ({
                       <td></td>
                     </tr>
                     <tr className="font-bold">
-                      <td colSpan={3} className="py-2 text-right">{isSalonOrder ? `Taxa de Serviço (${serviceFee}%)` : 'Taxa de Entrega:'}</td>
+                      <td colSpan={3} className="py-2 text-right flex items-center justify-end gap-1">
+                        {isSalonOrder ? <Pencil className="h-3 w-3" /> : <Truck className="h-4 w-4" />}
+                        {isSalonOrder ? `Taxa de Serviço (${serviceFee}%)` : `Taxa de Entrega (${deliveryFee}%)`}
+                      </td>
                       <td className="text-right">{formatCurrency(fee)}</td>
                       <td></td>
                     </tr>

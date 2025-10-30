@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Pizza, Plus, ArrowLeft, LogOut, Trash2, Search, X, Package, Settings, Menu as MenuIcon, Tag, BarChart2, Smile, ChevronDown, ChevronUp, PenSquare, ChevronLeft, Route, ExternalLink, ChefHat, Utensils, DollarSign, } from 'lucide-react';
+import { Pizza, Plus, ArrowLeft, LogOut, Trash2, Search, X, Package, Settings, Menu as MenuIcon, Tag, BarChart2, Smile, ChevronDown, ChevronUp, PenSquare, ChevronLeft, Route, ExternalLink, ChefHat, Utensils, DollarSign, PanelLeftClose, PanelRightClose } from 'lucide-react';
 import { useNavigate, useParams, Navigate, Link, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import AdminDeliveryMap from '../components/AdminDeliveryMap';
@@ -338,10 +338,11 @@ const AdminPage: React.FC = () => {
 
       {/* Sidebar */}
       <div className={`fixed lg:relative bg-gray-800 text-white flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-30 h-full ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className={`px-4 lg:px-8 py-4 bg-gray-900 text-2xl font-bold flex items-center gap-2 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
-            <Link to={`/admin/${username}`} className="flex items-center gap-2"> <Pizza {...iconProps}/>
-            </Link>
-            {!isSidebarCollapsed && <span>{username}</span>}
+        <div className={`px-4 lg:px-8 py-4 bg-gray-800 flex flex-col items-center gap-2 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+            <img src="/jatai.png" alt="Jatai" className={`rounded-full object-cover transition-all duration-300 ${isSidebarCollapsed ? 'h-10 w-10' : 'h-21 w-21'}`} />
+            {!isSidebarCollapsed && (
+              <span className="text-lg font-semibold text-white mt-2">{username}</span>
+            )}
         </div>
         <nav className="flex-1 px-4 py-4 space-y-2">
           <a href="#" onClick={() => setActiveTab('pedidos')} className={`flex items-center px-4 py-2 rounded-md ${activeTab === 'pedidos' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>
@@ -368,21 +369,12 @@ const AdminPage: React.FC = () => {
             {!isSidebarCollapsed && <span>Página de Pedidos</span>}
           </a>
         </nav>
-        <div className="px-4 py-4 border-t border-gray-700">
+        <div className="px-2 py-2 border-t border-gray-700">
             <button 
               onClick={handleLogout} 
               className="flex w-full items-center gap-2 hover:bg-gray-700 px-3 py-2 rounded-md transition-colors"
             > <LogOut className={`h-5 w-5 ${isSidebarCollapsed ? '' : 'mr-3'}`} {...iconProps}/>
               {!isSidebarCollapsed && <span>Sair</span>}
-            </button>
-        </div>
-        <div className="px-4 py-4 border-t border-gray-700">
-            <button
-              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
-              className="flex w-full items-center gap-2 hover:bg-gray-700 px-3 py-2 rounded-md transition-colors"
-            >
-              <ChevronLeft className={`h-5 w-5 transition-transform ${isSidebarCollapsed ? 'rotate-180' : ''} ${isSidebarCollapsed ? '' : 'mr-3'}`} />
-              {!isSidebarCollapsed && <span>Recolher</span>}
             </button>
         </div>
       </div>
@@ -391,26 +383,33 @@ const AdminPage: React.FC = () => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="bg-white shadow-md">
-          <div className="container mx-auto px-6 py-3">
+          <div className="px-6 py-3">
             <div className="flex justify-between items-center gap-4">
-              <button className="lg:hidden text-gray-600" onClick={() => setIsSidebarOpen(true)}> <MenuIcon className="h-6 w-6" {...iconProps}/>
-              </button>
-              <div className="relative max-w-md w-full">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"> <Search className="h-5 w-5 text-gray-400" {...iconProps}/>
+              <div className="flex items-center gap-4 flex-1">
+                <div className="flex items-center gap-4">
+                  <button className="lg:hidden text-gray-600" onClick={() => setIsSidebarOpen(true)}> <MenuIcon className="h-6 w-6" {...iconProps}/>
+                  </button>
+                  <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden lg:flex text-gray-600 hover:text-gray-800" title={isSidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}>
+                    {isSidebarCollapsed ? <PanelRightClose {...iconProps} /> : <PanelLeftClose {...iconProps} />}
+                  </button>
+                </div>
+                <div className="relative max-w-md w-full">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"> <Search className="h-5 w-5 text-gray-400" {...iconProps}/>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Buscar por nome, código, telefone ou endereço..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md text-sm"
+                    /> {searchTerm && (
+                        <button 
+                        onClick={() => setSearchTerm('')} 
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                        > <X className="h-5 w-5" {...iconProps}/>
+                        </button>
+                    )}
                   </div>
-                  <input
-                      type="text"
-                      placeholder="Buscar por nome, código, telefone ou endereço..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md text-sm"
-                  /> {searchTerm && (
-                      <button 
-                      onClick={() => setSearchTerm('')} 
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                      > <X className="h-5 w-5" {...iconProps}/>
-                      </button>
-                  )}
               </div>
               <div className="flex items-center gap-2 md:gap-4">
                 {activeTab === 'pedidos' && (
@@ -513,6 +512,11 @@ const AdminPage: React.FC = () => {
             </div>
           </div>
         </main>
+
+        {/* Footer */}
+        <footer className="bg-white border-t border-gray-200 p-3 text-center text-sm text-gray-500">
+          © {new Date().getFullYear()} Jataí Sistem Food. Todos os direitos reservados.
+        </footer>
       </div>
 
       <NewOrderModal
