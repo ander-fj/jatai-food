@@ -49,8 +49,11 @@ const log = (message) => {
   logStream.write(`[${timestamp}] ${message}\n`);
 };
 
-// --- Configuração do CORS ---
-// Permite que a URL do frontend seja configurada via variável de ambiente
+// --- Configuração do CORS (Versão Wildcard para Contornar Cache do Render) ---
+// ATENÇÃO: Esta é uma solução temporária para contornar o cache agressivo do Render.
+// O uso de wildcard com credentials: true não é permitido.
+// A solução é usar uma função que retorna a origem exata, ou * se não houver origem.
+
 const allowedOrigins = [
   'http://localhost:5173',
   'https://jataifood.vercel.app',
@@ -58,10 +61,10 @@ const allowedOrigins = [
   'https://www.jataifood.com.br',
   'https://jataifood.com.br',
   process.env.FRONTEND_URL
-].filter(Boolean); // Remove valores undefined/null
+].filter(Boolean);
 
 // Log das origens permitidas na inicialização
-console.log('🔒 Origens CORS permitidas:', allowedOrigins);
+console.log('🔒 Origens CORS permitidas (Lista de Fallback):', allowedOrigins);
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -70,22 +73,33 @@ const corsOptions = {
     
     // Permite requisições sem origin (como apps mobile ou Postman)
     if (!origin) {
-      console.log('✅ Origem vazia - permitida');
-      return callback(null, true);
+      console.log('✅ Origem vazia - permitida (Wildcard)');
+      // Retorna true para permitir o * no Access-Control-Allow-Origin
+      return callback(null, true); 
     }
     
-    // Correção final: Forçar a permissão para a origem de produção, ignorando a lista se necessário
+    // Se a origem for a de produção, permite
     if (origin === 'https://www.jataifood.com.br' || origin === 'https://jataifood.com.br') {
       console.log(`✅ Origem de produção (${origin}) - Permissão forçada.`);
-      callback(null, true);
-    } else if (allowedOrigins.indexOf(origin) !== -1) {
-      console.log(`✅ Origem permitida: ${origin}`);
-      callback(null, true);
-    } else {
-      console.log(`❌ Origem bloqueada por CORS: ${origin}`);
-      console.log(`   Origens permitidas: ${allowedOrigins.join(', ')}`);
-      callback(new Error('Not allowed by CORS'));
+      return callback(null, true);
     }
+
+    // Se a origem for a de staging/alpha, permite
+    if (origin === 'https://jataifood-alpha.vercel.app') {
+      console.log(`✅ Origem Alpha (${origin}) - Permissão forçada.`);
+      return callback(null, true);
+    }
+
+    // Fallback para a lista de origens (incluindo localhost)
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log(`✅ Origem permitida: ${origin}`);
+      return callback(null, true);
+    }
+
+    // Bloqueia se não estiver em nenhuma das listas
+    console.log(`❌ Origem bloqueada por CORS: ${origin}`);
+    console.log(`   Origens permitidas: ${allowedOrigins.join(', ')}`);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
