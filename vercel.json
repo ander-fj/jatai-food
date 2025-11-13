@@ -5,6 +5,10 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://jatai-food-backend.onrender.com/:path*"
+    },  
+    {
       "source": "/api/whatsapp/webhook/:username",
       "destination": "/api/whatsapp/webhook"
     },
