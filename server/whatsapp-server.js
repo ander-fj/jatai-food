@@ -52,15 +52,19 @@ const log = (message) => {
 // --- Configuração do CORS ---
 // Permite que a URL do frontend seja configurada via variável de ambiente
 const allowedOrigins = [
-  'http://localhost:5173',                    // Desenvolvimento local
-  'https://jataifood.vercel.app',             // Produção
-  'https://jataifood-alpha.vercel.app',       // Preview/Staging
-  process.env.FRONTEND_URL                    // Variável de ambiente adicional
-].filter(Boolean );
+  'http://localhost:5173',
+  'https://jataifood.vercel.app',
+  'https://jataifood-alpha.vercel.app',
+  'https://www.jataifood.com.br',
+  'https://jataifood.com.br',
+  process.env.FRONTEND_URL
+].filter(Boolean); // Remove valores undefined/null
 
 const corsOptions = {
   origin: function (origin, callback) {
+    // Permite requisições sem origin (como apps mobile ou Postman)
     if (!origin) return callback(null, true);
+    
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
