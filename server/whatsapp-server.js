@@ -74,7 +74,11 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    // Correção final: Forçar a permissão para a origem de produção, ignorando a lista se necessário
+    if (origin === 'https://www.jataifood.com.br' || origin === 'https://jataifood.com.br') {
+      console.log(`✅ Origem de produção (${origin}) - Permissão forçada.`);
+      callback(null, true);
+    } else if (allowedOrigins.indexOf(origin) !== -1) {
       console.log(`✅ Origem permitida: ${origin}`);
       callback(null, true);
     } else {
