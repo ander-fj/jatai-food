@@ -16,8 +16,13 @@ const admin = require('firebase-admin');
 // O servidor continuará funcionando para a conexão do WhatsApp,
 // mas funcionalidades que dependem do Firebase (como salvar configs) não funcionarão
 try {
-  // Inicialize o Firebase Admin SDK com as credenciais do arquivo
-  const serviceAccount = require('./firebase-credentials.json');
+  let serviceAccount;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  } else {
+    // Fallback for local development if file exists
+    serviceAccount = require('./firebase-credentials.json');
+  }
 
   // Tenta inicializar o Firebase com as credenciais
   admin.initializeApp({
