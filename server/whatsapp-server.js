@@ -60,19 +60,32 @@ const allowedOrigins = [
   process.env.FRONTEND_URL
 ].filter(Boolean); // Remove valores undefined/null
 
+// Log das origens permitidas na inicialização
+console.log('🔒 Origens CORS permitidas:', allowedOrigins);
+
 const corsOptions = {
   origin: function (origin, callback) {
+    // Log detalhado para debug
+    console.log(`📡 Requisição recebida de origem: ${origin || 'sem origem'}`);
+    
     // Permite requisições sem origin (como apps mobile ou Postman)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      console.log('✅ Origem vazia - permitida');
+      return callback(null, true);
+    }
     
     if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log(`✅ Origem permitida: ${origin}`);
       callback(null, true);
     } else {
-      console.log(`⚠️  Origem bloqueada por CORS: ${origin}`);
+      console.log(`❌ Origem bloqueada por CORS: ${origin}`);
+      console.log(`   Origens permitidas: ${allowedOrigins.join(', ')}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 app.use(cors(corsOptions));
 app.use(express.json());
