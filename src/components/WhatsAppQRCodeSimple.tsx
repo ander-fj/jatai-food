@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { QrCode, CheckCircle, Loader, RefreshCw, Smartphone, ExternalLink } from 'lucide-react';
+import { QrCode, CheckCircle, Loader, RefreshCw, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
-import { ref, set, onValue, off } from 'firebase/database';
+import { ref, set } from 'firebase/database';
 import { database } from '../config/firebase';
 
 const generateApiKey = () => {
@@ -13,114 +13,120 @@ const generateApiKey = () => {
   return key;
 };
 
-const generateSessionId = () => {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-};
-
 const WhatsAppQRCodeSimple: React.FC = () => {
   const username = localStorage.getItem('username') || 'A';
   const [qrCode, setQrCode] = useState<string>('');
   const [status, setStatus] = useState<'disconnected' | 'waiting' | 'connected'>('disconnected');
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string>('');
-  const [whatsappLink, setWhatsappLink] = useState<string>('');
+  const [serverUrl] = useState<string>(
+    localStorage.getItem('whatsapp_server_url') || 'http://localhost:3001'
+  );
 
   useEffect(() => {
-    const statusRef = ref(database, `tenants/${username}/whatsapp/status`);
-    const qrRef = ref(database, `tenants/${username}/whatsapp/qrCode`);
-    const sessionRef = ref(database, `tenants/${username}/whatsapp/sessionId`);
-
-    onValue(statusRef, (snapshot) => {
-      const value = snapshot.val();
-      if (value === 'connected') {
-        setStatus('connected');
-        setQrCode('');
-      } else if (value === 'qr_ready') {
-        setStatus('waiting');
-      }
-    });
-
-    onValue(qrRef, (snapshot) => {
-      const value = snapshot.val();
-      if (value) {
-        setQrCode(value);
-      }
-    });
-
-    onValue(sessionRef, (snapshot) => {
-      const value = snapshot.val();
-      if (value) {
-        setSessionId(value);
-      }
-    });
-
-    return () => {
-      off(statusRef);
-      off(qrRef);
-      off(sessionRef);
-    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 3000);
+    return () => clearInterval(interval);
   }, [username]);
+
+  const checkStatus = async () => {
+    try {
+      const response = await fetch(`${serverUrl}/api/whatsapp/status/${username}`);
+      const data = await response.json();
+
+      if (data.success) {
+        const serverStatus = data.status;
+
+        if (serverStatus === 'CONNECTED' || serverStatus === 'AUTHENTICATED') {
+          setStatus('connected');
+          setQrCode('');
+
+          const apiKey = generateApiKey();
+          const webhookSecret = generateApiKey();
+
+          await set(ref(database, `tenants/${username}/whatsapp`), {
+            status: 'connected',
+            connectedAt: Date.now(),
+            apiKey: apiKey,
+            webhookSecret: webhookSecret,
+            connectionId: `conn_${Date.now()}`,
+            autoReply: true
+          });
+        } else if (serverStatus === 'QR_CODE') {
+          setStatus('waiting');
+          fetchQRCode();
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao verificar status:', err);
+    }
+  };
+
+  const fetchQRCode = async () => {
+    try {
+      const response = await fetch(`${serverUrl}/api/whatsapp/qr/${username}`);
+      const data = await response.json();
+
+      if (data.success && data.qr) {
+        setQrCode(data.qr);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar QR Code:', err);
+    }
+  };
 
   const generateQRCode = async () => {
     setIsLoading(true);
     setStatus('waiting');
 
-    const apiKey = generateApiKey();
-    const webhookSecret = generateApiKey();
-    const newSessionId = generateSessionId();
-    const connectionId = `conn_${Date.now()}`;
+    try {
+      const response = await fetch(`${serverUrl}/api/whatsapp/start/${username}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    const whatsappWebUrl = `https://web.whatsapp.com`;
-    const linkDireto = `https://wa.me/?text=Conectar%20ao%20sistema%20${username}`;
+      const data = await response.json();
 
-    setSessionId(newSessionId);
-    setWhatsappLink(linkDireto);
-
-    const mockQRData = JSON.stringify({
-      sessionId: newSessionId,
-      username: username,
-      timestamp: Date.now()
-    });
-
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(whatsappWebUrl)}`;
-
-    await set(ref(database, `tenants/${username}/whatsapp`), {
-      status: 'qr_ready',
-      requestedAt: Date.now(),
-      qrCode: qrImageUrl,
-      apiKey: apiKey,
-      webhookSecret: webhookSecret,
-      connectionId: connectionId,
-      sessionId: newSessionId,
-      autoReply: true,
-      whatsappWebUrl: whatsappWebUrl
-    });
-
-    setQrCode(qrImageUrl);
-    setIsLoading(false);
-    toast.success('Acesse o link abaixo para conectar!');
-  };
-
-  const simulateConnection = async () => {
-    await set(ref(database, `tenants/${username}/whatsapp/status`), 'connected');
-    toast.success('WhatsApp conectado com sucesso!');
+      if (data.success) {
+        toast.success('Gerando QR Code... Aguarde');
+        setTimeout(checkStatus, 2000);
+      } else {
+        throw new Error(data.message || 'Erro ao iniciar conexão');
+      }
+    } catch (err: any) {
+      setStatus('disconnected');
+      toast.error('Erro ao conectar. Verifique se o servidor está rodando.');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const disconnect = async () => {
     setIsLoading(true);
     try {
-      await set(ref(database, `tenants/${username}/whatsapp`), {
-        status: 'disconnected',
-        disconnectedAt: Date.now()
+      const response = await fetch(`${serverUrl}/api/whatsapp/disconnect/${username}`, {
+        method: 'POST',
       });
 
-      setStatus('disconnected');
-      setQrCode('');
-      setSessionId('');
-      setWhatsappLink('');
-      toast.success('WhatsApp desconectado');
+      const data = await response.json();
+
+      if (data.success) {
+        setStatus('disconnected');
+        setQrCode('');
+
+        await set(ref(database, `tenants/${username}/whatsapp`), {
+          status: 'disconnected',
+          disconnectedAt: Date.now()
+        });
+
+        toast.success('WhatsApp desconectado');
+      } else {
+        throw new Error(data.message || 'Erro ao desconectar');
+      }
     } catch (err: any) {
-      toast.error('Erro ao desconectar');
+      toast.error('Erro ao desconectar: ' + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -164,12 +170,12 @@ const WhatsAppQRCodeSimple: React.FC = () => {
                 {isLoading ? (
                   <>
                     <Loader className="h-6 w-6 animate-spin" />
-                    Gerando...
+                    Iniciando...
                   </>
                 ) : (
                   <>
                     <QrCode className="h-6 w-6" />
-                    Conectar WhatsApp
+                    Gerar QR Code WhatsApp Web
                   </>
                 )}
               </button>
@@ -180,13 +186,26 @@ const WhatsAppQRCodeSimple: React.FC = () => {
                 <div className="text-blue-600 text-2xl">💡</div>
                 <div>
                   <p className="text-sm font-semibold text-blue-900 mb-1">
-                    Conexão instantânea via Firebase
+                    Como funciona:
+                  </p>
+                  <p className="text-sm text-blue-800 mb-2">
+                    1. Clique no botão acima para gerar o QR Code
+                  </p>
+                  <p className="text-sm text-blue-800 mb-2">
+                    2. Abra o WhatsApp no celular e vá em "Aparelhos conectados"
                   </p>
                   <p className="text-sm text-blue-800">
-                    Sistema 100% online, sem precisar instalar nada. Clique no botão acima e siga as instruções.
+                    3. Escaneie o QR Code que aparecerá na tela
                   </p>
                 </div>
               </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-4">
+              <p className="text-sm text-yellow-800">
+                <strong>Importante:</strong> Certifique-se de que o servidor WhatsApp está rodando.
+                Se necessário, execute: <code className="bg-yellow-200 px-1 rounded">cd server && node whatsapp-server.js</code>
+              </p>
             </div>
           </div>
         )}
@@ -207,65 +226,44 @@ const WhatsAppQRCodeSimple: React.FC = () => {
               </div>
 
               <div className="bg-white rounded-2xl p-6 mb-6 shadow-lg">
-                <div className="mb-6">
-                  <a
-                    href="https://web.whatsapp.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-3 px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-xl hover:bg-green-700 transition-all shadow-lg hover:shadow-xl"
-                  >
-                    <ExternalLink className="h-6 w-6" />
-                    Abrir WhatsApp Web
-                  </a>
-                  <p className="text-sm text-gray-600 mt-3">
-                    Clique no botão acima para abrir o WhatsApp Web
-                  </p>
-                </div>
-
-                {qrCode && (
-                  <div className="border-t pt-6">
-                    <p className="text-sm text-gray-600 mb-3 text-center font-semibold">
-                      Ou escaneie o QR Code abaixo:
-                    </p>
-                    <img
-                      src={qrCode}
-                      alt="QR Code"
-                      className="w-64 h-64 mx-auto rounded-xl border-4 border-green-500"
-                    />
+                {qrCode ? (
+                  <img
+                    src={qrCode}
+                    alt="QR Code WhatsApp Web"
+                    className="w-80 h-80 mx-auto rounded-xl border-4 border-green-500"
+                  />
+                ) : (
+                  <div className="w-80 h-80 mx-auto flex items-center justify-center">
+                    <Loader className="h-12 w-12 text-green-600 animate-spin" />
                   </div>
                 )}
               </div>
 
-              <div className="bg-gradient-to-br from-blue-50 to-green-50 border-2 border-blue-200 rounded-xl p-6 text-left mb-4">
+              <div className="bg-white border-2 border-blue-200 rounded-xl p-6 text-left mb-4">
                 <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2 text-lg">
                   <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">!</div>
-                  Instruções Rápidas:
+                  Como conectar:
                 </h4>
                 <div className="space-y-4">
                   <div className="flex gap-3 items-start">
                     <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">1</div>
                     <div>
-                      <p className="font-semibold text-gray-900">Clique em "Abrir WhatsApp Web"</p>
-                      <p className="text-sm text-gray-600">Abrirá em nova aba</p>
+                      <p className="font-semibold text-gray-900">Abra o WhatsApp no celular</p>
+                      <p className="text-sm text-gray-600">Android ou iPhone</p>
                     </div>
                   </div>
                   <div className="flex gap-3 items-start">
                     <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">2</div>
                     <div>
-                      <p className="font-semibold text-gray-900">Escaneie com seu celular</p>
-                      <p className="text-sm text-gray-600">WhatsApp → Menu → Aparelhos Conectados</p>
+                      <p className="font-semibold text-gray-900">Vá em Aparelhos Conectados</p>
+                      <p className="text-sm text-gray-600">Menu → Aparelhos conectados</p>
                     </div>
                   </div>
                   <div className="flex gap-3 items-start">
                     <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">3</div>
                     <div>
-                      <p className="font-semibold text-gray-900">Volte aqui e clique em "Confirmar"</p>
-                      <button
-                        onClick={simulateConnection}
-                        className="mt-2 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-all"
-                      >
-                        ✓ Confirmar Conexão
-                      </button>
+                      <p className="font-semibold text-gray-900">Escaneie o QR Code</p>
+                      <p className="text-sm text-gray-600">Aponte para o código acima</p>
                     </div>
                   </div>
                 </div>
