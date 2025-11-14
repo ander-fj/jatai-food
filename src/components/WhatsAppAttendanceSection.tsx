@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Save, RefreshCw, AlertCircle, Phone, Power, QrCode, Wifi, WifiOff, Link, Building, Clock, MessageSquare, MapPin, KeyRound } from 'lucide-react';
+import { MessageCircle, Save, RefreshCw, AlertCircle, Power, Wifi, WifiOff, KeyRound, Building } from 'lucide-react';
 import { toast } from 'sonner';
 import { ref, set, get } from 'firebase/database';
 import { database } from '../config/firebase';
@@ -7,19 +7,18 @@ import { database } from '../config/firebase';
 interface WhatsAppConfig {
   isActive: boolean;
   restaurantName?: string;
-  phoneNumber?: string; // Telefone de contato
+  phoneNumber?: string;
   menuUrl?: string;
   hours?: string;
   address?: string;
   welcomeMessage?: string;
-  geminiApiKey?: string; // Adicionado campo para a chave da API
+  geminiApiKey?: string;
+  whatsappAccessToken?: string;
+  whatsappAccountId?: string;
 }
 
-
 interface ConnectionStatus {
-  status: 'DISCONNECTED' | 'INITIALIZING' | 'QR_CODE' | 'AUTHENTICATED' | 'CONNECTED' | 'AUTH_FAILURE' | 'ERROR' | 'SERVER_OFFLINE' | 'NOT_INITIALIZED';
-  isConnected: boolean;
-  hasQrCode: boolean;
+  status: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'ERROR' | 'SERVER_OFFLINE';
 }
 
 const WHATSAPP_SERVER_URL = import.meta.env.VITE_WHATSAPP_SERVER_URL || 'http://localhost:3001';
@@ -37,39 +36,18 @@ const WhatsAppAttendanceSection: React.FC = () => {
     address: '',
     welcomeMessage: '',
     geminiApiKey: '',
+    whatsappAccessToken: 'EAATJ10ButJwBP4QZAwUo8DtOKLHG77pTM1OgtIEqqpS9EbpdC1q12vM0QvbYKZCqWaRMxOA6IlQvjWJgquU1QNTCRJgdiUSJOF2o5LmugyAoiXJa5xCJKpj4nfNYD0xr0zqzAA1ysScJCoSQjSgNLY9VrGK6QkzlYsmYrtnazfVyG7H6m68YEtHCkbbzt8',
+    whatsappAccountId: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<Partial<ConnectionStatus>>({
-    status: 'NOT_INITIALIZED',
-    isConnected: false,
-    hasQrCode: false
-  });
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({ status: 'DISCONNECTED' });
   const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
     loadConfig();
     checkConnectionStatus();
   }, [username]);
-
-  useEffect(() => {
-    // Este efeito lida com a lógica de polling (verificação contínua).
-    const finalStates = ['CONNECTED', 'DISCONNECTED', 'AUTH_FAILURE', 'ERROR', 'SERVER_OFFLINE', 'NOT_INITIALIZED'];
-    if (finalStates.includes(connectionStatus.status!)) {
-      return; // Para de verificar se atingiu um estado final.
-    }
-
-    const intervalId = setInterval(() => {
-      console.log(`Polling... Status atual: ${connectionStatus.status}`);
-      if (connectionStatus.status === 'INITIALIZING' || connectionStatus.status === 'QR_CODE') {
-        fetchQrCode();
-      }
-      checkConnectionStatus(); // Continua verificando o status geral.
-    }, 3000); // Verifica a cada 3 segundos.
-
-    return () => clearInterval(intervalId);
-  }, [username, connectionStatus.status]);
 
   const loadConfig = async () => {
     if (!username) return;
@@ -81,7 +59,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
       
       if (snapshot.exists()) {
         const data = snapshot.val();
-        setConfig(data);
+        setConfig(prevConfig => ({ ...prevConfig, ...data }));
       }
     } catch (error) {
       console.error('Erro ao carregar configuração:', error);
@@ -92,23 +70,13 @@ const WhatsAppAttendanceSection: React.FC = () => {
   };
 
   const saveConfig = async () => {
-    console.log('🔥 SAVE CONFIG CHAMADO!');
-    console.log('Username:', username);
-    console.log('Config atual:', config);
+    if (!username) return;
     
-    if (!username) {
-      console.log('❌ Username não encontrado!');
+    if (!config.whatsappAccessToken || !config.whatsappAccountId) {
+      toast.error('Por favor, insira o Token de Acesso e a ID da Conta do WhatsApp.');
       return;
     }
     
-    // Validações
-    if (!config.phoneNumber && !config.hours && !config.address) {
-      console.log('❌ Número do WhatsApp não preenchido');
-      toast.error('Por favor, insira o número do WhatsApp');
-      return;
-    }
-    
-    console.log('✅ Validações passaram! Iniciando salvamento...');
     setIsSaving(true);
     try {      
       const dataToSave = {
@@ -119,42 +87,35 @@ const WhatsAppAttendanceSection: React.FC = () => {
         hours: config.hours || '',
         address: config.address || '',
         welcomeMessage: config.welcomeMessage || '',
-        geminiApiKey: config.geminiApiKey || '', // Salvar a chave da API
+        geminiApiKey: config.geminiApiKey || '',
+        whatsappAccessToken: config.whatsappAccessToken || '',
+        whatsappAccountId: config.whatsappAccountId || '',
         updatedAt: new Date().toISOString()
       };
       
-      // Salvar em whatsappConfig
       const whatsappConfigRef = ref(database, `tenants/${username}/whatsappConfig`);
       await set(whatsappConfigRef, dataToSave);
 
-      console.log('💾 Dados a salvar:', dataToSave);
-      
-      console.log('✅ Salvo com sucesso no Firebase!');
       toast.success('Configurações salvas com sucesso!');
     } catch (error) {
-      console.error('❌ Erro ao salvar configuração:', error);
+      console.error('Erro ao salvar configuração:', error);
       toast.error('Erro ao salvar configurações');
     } finally {
       setIsSaving(false);
-      console.log('🏁 SaveConfig finalizado');
     }
   };
 
   const handleToggleActive = async (isActive: boolean) => {
-    // Atualiza o estado local imediatamente para feedback visual
     const newConfig = { ...config, isActive };
     setConfig(newConfig);
 
-    // Salva apenas a alteração do 'isActive' no Firebase
     try {
       const activeRef = ref(database, `tenants/${username}/whatsappConfig/isActive`);
       await set(activeRef, isActive);
       toast.success(`Atendimento ${isActive ? 'ativado' : 'desativado'}!`);
-      console.log(`✅ Status do atendimento alterado para: ${isActive}`);
     } catch (error) {
-      console.error('❌ Erro ao atualizar status de atendimento:', error);
+      console.error('Erro ao atualizar status de atendimento:', error);
       toast.error('Erro ao alterar status do atendimento.');
-      // Reverte a alteração visual em caso de erro
       setConfig({ ...config, isActive: !isActive });
     }
   };
@@ -172,6 +133,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
+<<<<<<< HEAD
         console.log('✅ Status recebido:', data);
         setConnectionStatus(prev => ({
           ...prev,
@@ -229,10 +191,18 @@ const WhatsAppAttendanceSection: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Erro ao buscar QR code:', error);
+        setConnectionStatus({ status: data.status === 'CONNECTED' ? 'CONNECTED' : 'DISCONNECTED' });
+      } else {
+        setConnectionStatus({ status: 'DISCONNECTED' });
+      }
+    } catch (error) {
+      console.error('Servidor offline ou inacessível:', error);
+      setConnectionStatus({ status: 'SERVER_OFFLINE' });
     }
   };
 
   const connectWhatsApp = async () => {
+<<<<<<< HEAD
     if (!username) {
       toast.error('Usuário não identificado');
       return;
@@ -251,11 +221,27 @@ const WhatsAppAttendanceSection: React.FC = () => {
         headers: {
           'Content-Type': 'application/json'
         }
+    if (!username || !config.whatsappAccessToken || !config.whatsappAccountId) {
+      toast.error("Token de Acesso e ID da Conta do WhatsApp são obrigatórios para conectar.");
+      return;
+    }
+    
+    setIsConnecting(true);
+    setConnectionStatus({ status: 'CONNECTING' });
+    try {
+      const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/connect/${username}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          accessToken: config.whatsappAccessToken,
+          accountId: config.whatsappAccountId 
+        }),
       });
 
       console.log('📥 Resposta da conexão:', response.status);
 
       if (response.ok) {
+<<<<<<< HEAD
         const data = await response.json();
         console.log('✅ Resposta:', data);
 
@@ -275,12 +261,26 @@ const WhatsAppAttendanceSection: React.FC = () => {
       console.error('❌ Erro ao conectar WhatsApp:', error);
       toast.error('Erro ao conectar. Verifique se o servidor está rodando em: ' + WHATSAPP_SERVER_URL);
       setConnectionStatus({ status: 'SERVER_OFFLINE', isConnected: false, hasQrCode: false });
+        toast.success('Conexão com WhatsApp estabelecida!');
+        setConnectionStatus({ status: 'CONNECTED' });
+      } else {
+        const errorData = await response.json();
+        toast.error(`Erro ao conectar: ${errorData.message || 'Verifique as credenciais e o servidor.'}`);
+        setConnectionStatus({ status: 'ERROR' });
+      }
+    } catch (error) {
+      console.error('Erro ao conectar WhatsApp:', error);
+      toast.error('Erro ao conectar. Verifique se o servidor está rodando.');
+      setConnectionStatus({ status: 'SERVER_OFFLINE' });
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const disconnectWhatsApp = async () => { // Tornando a função async
+  // Adicionado para resolver o conflito, pois a versão remota tinha essa função
+  const [qrCode, setQrCode] = useState<string | null>(null);
+
+  const disconnectWhatsApp = async () => {
     if (!username) return;
     
     toast.info('Desconectando WhatsApp...');
@@ -291,9 +291,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
       if (response.ok) {
         toast.success('WhatsApp desconectado com sucesso!');
-        setQrCode(null);
-        // Atualiza o estado para refletir a desconexão imediatamente
-        setConnectionStatus({ status: 'DISCONNECTED', isConnected: false, hasQrCode: false });
+        setConnectionStatus({ status: 'DISCONNECTED' });
       } else {
         toast.error('Ocorreu um erro no servidor ao tentar desconectar.');
       }
@@ -303,69 +301,42 @@ const WhatsAppAttendanceSection: React.FC = () => {
     }
   };
 
-  const formatPhoneNumber = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    
-    if (numbers.length <= 2) {
-      return numbers;
-    } else if (numbers.length <= 7) {
-      return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
-    } else if (numbers.length <= 11) {
-      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
-    }
-    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
-  };
-
-  const getStatusColor = () => {
-    switch (connectionStatus.status) {
-      case 'CONNECTED': return 'green';
-      case 'AUTHENTICATED': return 'blue';
-      case 'QR_CODE': return 'yellow';
-      case 'INITIALIZING': return 'yellow';
-      case 'AUTH_FAILURE': return 'red';
-      case 'ERROR': return 'red';
-      case 'SERVER_OFFLINE': return 'red';
-      default: return 'gray';
-    }
-  };
-
   const getStatusText = () => {
     switch (connectionStatus.status) {
       case 'CONNECTED': return 'Conectado';
-      case 'AUTHENTICATED': return 'Autenticado';
-      case 'QR_CODE': return 'Aguardando leitura do QR Code';
-      case 'INITIALIZING': return 'Inicializando...';
-      case 'AUTH_FAILURE': return 'Falha na autenticação';
+      case 'CONNECTING': return 'Conectando...';
       case 'ERROR': return 'Erro na conexão';
       case 'SERVER_OFFLINE': return 'Servidor Offline';
-      case 'NOT_INITIALIZED': return 'Não Iniciado';
       default: return 'Desconectado';
     }
   };
 
   const getStatusIcon = () => {
-    if (connectionStatus.isConnected) {
-      return <Wifi className="h-8 w-8 text-green-600" />;
-    } else {
-      return <WifiOff className="h-8 w-8 text-red-500" />;
+    switch (connectionStatus.status) {
+        case 'CONNECTED':
+            return <Wifi className="h-8 w-8 text-green-600" />;
+        case 'CONNECTING':
+            return <RefreshCw className="h-8 w-8 text-blue-500 animate-spin" />;
+        default:
+            return <WifiOff className="h-8 w-8 text-red-500" />;
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-3 bg-green-100 rounded-full">
             <MessageCircle className="h-6 w-6 text-green-600" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">Atendimento WhatsApp</h2>
-            <p className="text-gray-600">Configure a integração com WhatsApp Web e IA Gemini para receber pedidos automaticamente</p>
+            <h2 className="text-2xl font-bold text-gray-800">Atendimento WhatsApp (API Oficial)</h2>
+            <p className="text-gray-600">Configure a integração com a API oficial do WhatsApp.</p>
           </div>
         </div>
       </div> 
 
+<<<<<<< HEAD
       {/* Server Offline Alert */}
       {connectionStatus.status === 'SERVER_OFFLINE' && (
         <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6">
@@ -416,6 +387,9 @@ const WhatsAppAttendanceSection: React.FC = () => {
       <div className={`rounded-lg shadow-md p-6 border-2 ${
         connectionStatus.isConnected
           ? 'bg-green-50 border-green-200'
+      <div className={`rounded-lg shadow-md p-6 border-2 ${
+        connectionStatus.status === 'CONNECTED' 
+          ? 'bg-green-50 border-green-200' 
           : 'bg-red-50 border-red-200'
       }`}>
         <div className="flex items-center justify-between mb-4">
@@ -426,10 +400,10 @@ const WhatsAppAttendanceSection: React.FC = () => {
                 Status: {getStatusText()}
               </h3>
               <p className="text-sm text-gray-600">
-                {connectionStatus.isConnected 
-                  ? 'O WhatsApp está conectado e funcionando' 
+                {connectionStatus.status === 'CONNECTED' 
+                  ? 'O WhatsApp está conectado e funcionando via API Oficial.' 
                   : connectionStatus.status === 'SERVER_OFFLINE'
-                  ? 'Erro de conexão. Verifique se o servidor Node.js está rodando na pasta "server".'
+                  ? 'Erro de conexão. Verifique se o servidor está rodando.'
                   : 'Conecte seu WhatsApp para começar a receber pedidos.'}
               </p>
             </div>
@@ -438,13 +412,14 @@ const WhatsAppAttendanceSection: React.FC = () => {
             <input
               type="checkbox"
               checked={config.isActive}
-              onChange={(e) => handleToggleActive(e.target.checked)} // Corrigido para chamar a função correta
+              onChange={(e) => handleToggleActive(e.target.checked)}
               className="sr-only peer"
             />
             <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
           </label>
         </div>
 
+<<<<<<< HEAD
         {/* QR Code Display */}
         {connectionStatus.status === 'QR_CODE' && qrCode && (
           <div className="mt-4 p-6 bg-gradient-to-br from-yellow-50 to-green-50 rounded-lg border-2 border-yellow-300 shadow-lg">
@@ -492,11 +467,14 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
         {/* Connection Buttons */}
         <div className="mt-4 flex gap-3">
-          {!connectionStatus.isConnected ? (
+          {connectionStatus.status !== 'CONNECTED' ? (
             <button
               onClick={connectWhatsApp}
+<<<<<<< HEAD
               disabled={isConnecting}
               className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg transform hover:scale-[1.02] active:scale-[0.98]"
+              disabled={isConnecting || !config.whatsappAccessToken || !config.whatsappAccountId}
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Power className="h-5 w-5" />
               {isConnecting ? 'Conectando...' : 'Conectar WhatsApp'}
@@ -513,124 +491,52 @@ const WhatsAppAttendanceSection: React.FC = () => {
         </div>
       </div>
 
-      {/* Configuration Form */}
+      {/* Server Offline Alert (from d62ab94, but removed in favor of the more detailed one from HEAD) */}
+      {/* {connectionStatus.status === 'SERVER_OFFLINE' && (
+        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+            <div>
+              <h4 className="font-semibold text-yellow-900 mb-1">Servidor WhatsApp necessário</h4>
+              <p className="text-sm text-yellow-800">
+                Para usar esta funcionalidade, você precisa ter o servidor Node.js rodando e configurado para a API Oficial.
+              </p>
+            </div>
+          </div>
+        </div>
+      )} */}
+
       <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
-        <h3 className="text-xl font-semibold text-gray-800 mb-4">Configurações</h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">Configurações da API do WhatsApp</h3>
         
-        {/* Nome do Restaurante */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <Building className="h-4 w-4" />
-            Nome do Restaurante
-          </label>
-          <input
-            type="text"
-            value={config.restaurantName || ''}
-            onChange={(e) => setConfig({ ...config, restaurantName: e.target.value })}
-            placeholder="Ex: Pizzaria do Zé"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Phone Number */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <Phone className="h-4 w-4" />
-            Número do WhatsApp
-          </label>
-          <input
-            type="text"
-            value={config.phoneNumber || ''}
-            onChange={(e) => setConfig({ ...config, phoneNumber: formatPhoneNumber(e.target.value) })}
-            placeholder="(64) 99999-9999"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Digite o número do WhatsApp que receberá os pedidos
-          </p>
-        </div>
-
-        {/* Horário de Funcionamento */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <Clock className="h-4 w-4" />
-            Horário de Funcionamento
-          </label>
-          <input
-            type="text"
-            value={config.hours || ''}
-            onChange={(e) => setConfig({ ...config, hours: e.target.value })}
-            placeholder="Seg a Sex: 18h às 23h, Sáb e Dom: 18h às 00h"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Endereço */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <MapPin className="h-4 w-4" />
-            Endereço
-          </label>
-          <input
-            type="text"
-            value={config.address || ''}
-            onChange={(e) => setConfig({ ...config, address: e.target.value })}
-            placeholder="Rua das Pizzas, 123, Bairro Saboroso"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Menu URL */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <Link className="h-4 w-4" />
-            Link do Cardápio/Página de Pedidos
-          </label>
-          <input
-            type="url"
-            value={config.menuUrl || ''}
-            onChange={(e) => setConfig({ ...config, menuUrl: e.target.value })}
-            placeholder="https://seu-site.com/pedido"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Este é o link que o agente enviará quando o cliente pedir o cardápio.
-          </p>
-        </div>
-
-        {/* Mensagem de Boas-Vindas */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <MessageSquare className="h-4 w-4" />
-            Mensagem de Boas-Vindas
-          </label>
-          <textarea
-            value={config.welcomeMessage || ''}
-            onChange={(e) => setConfig({ ...config, welcomeMessage: e.target.value })}
-            placeholder="Olá! Bem-vindo à {restaurantName}. Como posso ajudar?"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            rows={3}
-          />
-          <p className="text-xs text-gray-500 mt-1">Use {'{restaurantName}'} para inserir o nome do restaurante automaticamente.</p>
-        </div>
-
-        {/* Chave da API Gemini */}
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
             <KeyRound className="h-4 w-4" />
-            Chave da API do Gemini
+            Token de Acesso (WhatsApp Business)
           </label>
           <input
             type="password"
-            value={config.geminiApiKey || ''}
-            onChange={(e) => setConfig({ ...config, geminiApiKey: 'AIzaSyD2-3zEw9OqMPDo4_05x5NVnjb77W11OJk' })}
-            placeholder="Cole sua chave aqui (começa com 'AIza...')"
+            value={config.whatsappAccessToken || ''}
+            onChange={(e) => setConfig({ ...config, whatsappAccessToken: e.target.value })}
+            placeholder="Cole seu token de acesso permanente aqui"
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Sua chave é armazenada de forma segura e usada para processar os pedidos.</p>
         </div>
 
-        {/* Action Buttons */}
+        <div>
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+            <Building className="h-4 w-4" />
+            ID da Conta do WhatsApp Business
+          </label>
+          <input
+            type="text"
+            value={config.whatsappAccountId || ''}
+            onChange={(e) => setConfig({ ...config, whatsappAccountId: e.target.value })}
+            placeholder="Cole a ID da sua conta business aqui"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+          />
+        </div>
+
         <div className="flex gap-3 pt-4">
           <button
             onClick={saveConfig}
@@ -642,36 +548,6 @@ const WhatsAppAttendanceSection: React.FC = () => {
           </button>
         </div>
       </div>
-
-      {/* Instructions */}
-      <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-3">Como funciona?</h3>
-        <ol className="space-y-2 text-sm text-blue-800">
-          <li className="flex gap-2">
-            <span className="font-bold">1.</span>
-            <span>Configure seu número do WhatsApp e o link do cardápio acima</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-bold">2.</span>
-            <span>Clique em "Salvar Configurações"</span>
-          </li>
-        </ol>
-      </div>
-    
-      {/* Server Status Warning - Agora mostra apenas se o servidor estiver offline */}
-      {connectionStatus.status === 'SERVER_OFFLINE' && (
-        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-            <div>
-              <h4 className="font-semibold text-yellow-900 mb-1">Servidor WhatsApp necessário</h4>
-              <p className="text-sm text-yellow-800">
-                Para usar esta funcionalidade, você precisa ter o servidor Node.js rodando. Execute: <code className="bg-yellow-100 px-2 py-1 rounded">yarn start</code> na pasta <code className="bg-yellow-100 px-2 py-1 rounded">server</code>.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
