@@ -9,7 +9,6 @@ import WhatsAppAttendanceSection from '../components/WhatsAppAttendanceSection';
 import WhatsAppBusinessSection from '../components/WhatsAppBusinessSection';
 import WhatsAppChatInterface from '../components/WhatsAppChatInterface';
 import WhatsAppQRCodeSimple from '../components/WhatsAppQRCodeSimple';
-import WhatsAppTestMessages from '../components/WhatsAppTestMessages';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import SystemConfigurationModal from '../components/SystemConfigurationModal';
 import WhatsAppPromotionSection from '../components/WhatsAppPromotionSection';
@@ -89,7 +88,6 @@ const SIDEBAR_TABS = [
     { id: 'analytics', label: 'Relatórios', icon: BarChart2 },
     { id: 'piadas', label: 'Piadas', icon: Smile },
     { id: 'conectar-whatsapp', label: 'Conectar WhatsApp', icon: Phone },
-    { id: 'teste-whatsapp', label: 'Teste WhatsApp', icon: MessageCircle },
     { id: 'atendimento-whatsapp', label: 'Atendimento WhatsApp', icon: MessageCircle },
     { id: 'configuracoes', label: 'Configurações', icon: Settings }
 ] as const;
@@ -537,11 +535,6 @@ const AdminPage: React.FC = () => {
           <div className={activeTab === 'conectar-whatsapp' ? '' : 'hidden'}>
             <div className="p-6">
               <WhatsAppQRCodeSimple />
-            </div>
-          </div>
-          <div className={activeTab === 'teste-whatsapp' ? '' : 'hidden'}>
-            <div className="p-6">
-              <WhatsAppTestMessages />
             </div>
           </div>
           <div className={activeTab === 'atendimento-whatsapp' ? '' : 'hidden'}>
