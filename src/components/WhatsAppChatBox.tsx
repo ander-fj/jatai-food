@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, Phone, User, Search, X, Check, CheckCheck } from 'lucide-react';
+import { MessageCircle, Send, Phone, User, CheckCheck } from 'lucide-react';
 import { database } from '../config/firebase';
 import { ref, onValue, set, get } from 'firebase/database';
 import { toast } from 'sonner';
@@ -28,7 +28,6 @@ const WhatsAppChatBox: React.FC = () => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -150,10 +149,6 @@ const WhatsAppChatBox: React.FC = () => {
   };
 
   const currentChat = chats.find(c => c.phoneNumber === selectedChat);
-  const filteredChats = chats.filter(chat =>
-    chat.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    chat.phoneNumber.includes(searchTerm)
-  );
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -187,30 +182,15 @@ const WhatsAppChatBox: React.FC = () => {
           <p className="text-sm text-green-100 mt-1">{chats.length} conversas ativas</p>
         </div>
 
-        <div className="p-3 border-b">
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar conversa..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-        </div>
-
         <div className="flex-1 overflow-y-auto">
-          {filteredChats.length === 0 ? (
+          {chats.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               <MessageCircle className="w-16 h-16 mx-auto mb-4 text-gray-300" />
               <p className="font-semibold mb-2">Nenhuma conversa</p>
-              <p className="text-sm">
-                {searchTerm ? 'Nenhuma conversa encontrada' : 'Aguardando mensagens...'}
-              </p>
+              <p className="text-sm">Aguardando mensagens dos clientes...</p>
             </div>
           ) : (
-            filteredChats.map((chat) => (
+            chats.map((chat) => (
               <div
                 key={chat.phoneNumber}
                 onClick={() => setSelectedChat(chat.phoneNumber)}
