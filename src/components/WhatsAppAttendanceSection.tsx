@@ -22,9 +22,7 @@ interface ConnectionStatus {
   hasQrCode: boolean;
 }
 
-const WHATSAPP_SERVER_URL = import.meta.env.VITE_WHATSAPP_SERVER_URL || 'http://localhost:3001';
-
-console.log('🔧 WhatsApp Server URL:', WHATSAPP_SERVER_URL);
+ const WHATSAPP_SERVER_URL = import.meta.env.VITE_WHATSAPP_SERVER_URL || 'http://localhost:3001';
 
 const WhatsAppAttendanceSection: React.FC = () => {
   const username = localStorage.getItem('username') || 'A';
@@ -161,31 +159,16 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
   const checkConnectionStatus = async () => {
     if (!username) return;
-
+    
     try {
-      console.log('📡 Verificando status da conexão...');
-      const url = `${WHATSAPP_SERVER_URL}/api/whatsapp/status/${username}`;
-      console.log('🔗 URL do status:', url);
-
-      const response = await fetch(url);
-      console.log('📥 Resposta do status:', response.status, response.ok);
-
+      const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/status/${username}`);
       if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Status recebido:', data);
-        setConnectionStatus(prev => ({
-          ...prev,
-          status: data.status,
-          isConnected: data.status === 'CONNECTED',
-          hasQrCode: data.status === 'QR_CODE'
-        }));
-      } else {
-        console.warn('⚠️ Resposta não OK:', response.status);
-        const text = await response.text();
-        console.log('📄 Resposta:', text);
+        const data = await response.json(); // Ex: { success: true, status: 'QR_CODE' }
+        setConnectionStatus(prev => ({ ...prev, status: data.status, isConnected: data.status === 'CONNECTED' }));
       }
     } catch (error) {
-      console.error('❌ Erro ao verificar status:', error);
+      console.error('Servidor offline ou inacessível:', error);
+      // CORREÇÃO: Se a busca falhar (ex: servidor offline), atualiza o status para refletir isso.
       setConnectionStatus({
         status: 'SERVER_OFFLINE',
         isConnected: false,
@@ -198,83 +181,47 @@ const WhatsAppAttendanceSection: React.FC = () => {
     if (!username) return;
 
     try {
-      const url = `${WHATSAPP_SERVER_URL}/api/whatsapp/qr/${username}`;
-      console.log('📷 Buscando QR code em:', url);
-
-      const response = await fetch(url);
-      console.log('📥 Resposta do QR:', response.status);
-
+      const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/qr/${username}`); // URL corrigida
+      // Se a resposta for 404, significa que o QR code ainda não está pronto.
+      // Isso é esperado durante o polling, então não tratamos como um erro.
       if (response.status === 404) {
-        console.log('⏳ QR Code ainda não disponível');
-        setQrCode(null);
+        setQrCode(null); // Garante que o QR code antigo seja limpo se ele expirar.
         return;
       }
-
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ QR Code recebido:', data.success);
-
         if (data.qr) {
-          console.log('🎯 Atualizando QR Code na interface');
           setQrCode(data.qr);
-          setConnectionStatus(prev => ({ ...prev, status: 'QR_CODE', hasQrCode: true }));
-          toast.success('QR Code gerado! Escaneie com seu WhatsApp');
+          setConnectionStatus(prev => ({ ...prev, status: 'QR_CODE' }));
         } else {
-          console.warn('⚠️ QR Code vazio na resposta');
           setQrCode(null);
         }
-      } else {
-        const text = await response.text();
-        console.error('❌ Erro na resposta do QR:', text);
       }
     } catch (error) {
-      console.error('❌ Erro ao buscar QR code:', error);
+      console.error('Erro ao buscar QR code:', error);
+      // Não definimos o status como erro aqui, pois pode ser apenas um problema de rede temporário.
     }
   };
 
   const connectWhatsApp = async () => {
-    if (!username) {
-      toast.error('Usuário não identificado');
-      return;
-    }
-
-    console.log('🚀 Iniciando conexão WhatsApp para:', username);
+    if (!username) return;
+    
     setIsConnecting(true);
-    setQrCode(null);
-
     try {
-      const url = `${WHATSAPP_SERVER_URL}/api/whatsapp/start/${username}`;
-      console.log('🔗 URL de conexão:', url);
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/start/${username}`, {
+        method: 'POST'
       });
 
-      console.log('📥 Resposta da conexão:', response.status);
-
       if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Resposta:', data);
-
         toast.success('Iniciando conexão com WhatsApp...');
+        // Apenas muda o status para inicializando, o useEffect cuidará do resto.
         setConnectionStatus({ status: 'INITIALIZING', isConnected: false, hasQrCode: false });
-
-        setTimeout(() => {
-          console.log('⏰ Iniciando polling após 2 segundos');
-          fetchQrCode();
-        }, 2000);
       } else {
-        const text = await response.text();
-        console.error('❌ Erro na resposta:', text);
-        toast.error('Erro ao iniciar conexão: ' + response.status);
+        toast.error('Erro ao iniciar conexão');
       }
     } catch (error) {
-      console.error('❌ Erro ao conectar WhatsApp:', error);
-      toast.error('Erro ao conectar. Verifique se o servidor está rodando em: ' + WHATSAPP_SERVER_URL);
-      setConnectionStatus({ status: 'SERVER_OFFLINE', isConnected: false, hasQrCode: false });
+      console.error('Erro ao conectar WhatsApp:', error);
+      toast.error('Erro ao conectar. Verifique se o servidor está rodando.');
     } finally {
       setIsConnecting(false);
     }
@@ -366,37 +313,10 @@ const WhatsAppAttendanceSection: React.FC = () => {
         </div>
       </div> 
 
-      {/* Server Offline Alert */}
-      {connectionStatus.status === 'SERVER_OFFLINE' && (
-        <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-red-900 mb-2">Servidor WhatsApp Offline</h3>
-              <p className="text-sm text-red-800 mb-3">
-                Não foi possível conectar ao servidor WhatsApp. Verifique:
-              </p>
-              <ul className="text-sm text-red-800 space-y-1 list-disc list-inside mb-3">
-                <li>O servidor Node.js está rodando na pasta "server"</li>
-                <li>Execute: <code className="bg-red-100 px-2 py-1 rounded">cd server && npm start</code></li>
-                <li>URL do servidor: <code className="bg-red-100 px-2 py-1 rounded">{WHATSAPP_SERVER_URL}</code></li>
-              </ul>
-              <button
-                onClick={checkConnectionStatus}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Tentar Novamente
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Connection Status Card */}
       <div className={`rounded-lg shadow-md p-6 border-2 ${
-        connectionStatus.isConnected
-          ? 'bg-green-50 border-green-200'
+        connectionStatus.isConnected 
+          ? 'bg-green-50 border-green-200' 
           : 'bg-red-50 border-red-200'
       }`}>
         <div className="flex items-center justify-between mb-4">
@@ -428,45 +348,20 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
         {/* QR Code Display */}
         {connectionStatus.status === 'QR_CODE' && qrCode && (
-          <div className="mt-4 p-6 bg-gradient-to-br from-yellow-50 to-green-50 rounded-lg border-2 border-yellow-300 shadow-lg">
+          <div className="mt-4 p-4 bg-white rounded-lg border-2 border-yellow-300">
             <div className="flex flex-col items-center">
-              <div className="flex items-center gap-2 mb-4">
-                <QrCode className="h-6 w-6 text-yellow-600" />
-                <h4 className="text-xl font-bold text-gray-800">QR Code Gerado!</h4>
+              <div className="flex items-center gap-2 mb-3">
+                <QrCode className="h-5 w-5 text-yellow-600" />
+                <h4 className="text-lg font-semibold text-gray-800">Escaneie o QR Code</h4>
               </div>
-
-              <div className="bg-white p-4 rounded-xl shadow-md mb-4">
-                <img src={qrCode} alt="QR Code WhatsApp" className="w-64 h-64 border-4 border-gray-200 rounded-lg" />
-              </div>
-
-              <div className="bg-white rounded-lg p-4 mb-4 max-w-md">
-                <p className="text-sm font-semibold text-gray-800 mb-2 text-center">Como conectar:</p>
-                <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-                  <li>Abra o <strong>WhatsApp</strong> no seu celular</li>
-                  <li>Toque em <strong>Menu</strong> ou <strong>Configurações</strong></li>
-                  <li>Selecione <strong>Dispositivos conectados</strong></li>
-                  <li>Toque em <strong>Conectar um dispositivo</strong></li>
-                  <li>Aponte a câmera para o QR Code acima</li>
-                </ol>
-              </div>
-
-              <div className="flex items-center gap-2 text-yellow-600 animate-pulse">
-                <RefreshCw className="h-5 w-5 animate-spin" />
-                <span className="text-sm font-medium">Aguardando leitura do QR Code...</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Initializing State */}
-        {connectionStatus.status === 'INITIALIZING' && !qrCode && (
-          <div className="mt-4 p-6 bg-blue-50 rounded-lg border-2 border-blue-300">
-            <div className="flex flex-col items-center">
-              <RefreshCw className="h-12 w-12 text-blue-600 animate-spin mb-3" />
-              <h4 className="text-lg font-semibold text-gray-800 mb-2">Inicializando WhatsApp...</h4>
-              <p className="text-sm text-gray-600 text-center">
-                Aguarde enquanto preparamos a conexão. O QR Code será exibido em instantes.
+              <img src={qrCode} alt="QR Code WhatsApp" className="w-64 h-64 border-4 border-gray-200 rounded-lg" />
+              <p className="text-sm text-gray-600 mt-3 text-center">
+                Abra o WhatsApp no seu celular → Dispositivos conectados → Conectar um dispositivo
               </p>
+              <div className="flex items-center gap-2 mt-2 text-yellow-600">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Aguardando leitura...</span>
+              </div>
             </div>
           </div>
         )}
