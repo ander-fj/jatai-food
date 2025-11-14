@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Pizza, Plus, ArrowLeft, LogOut, Trash2, Search, X, Package, Settings, Menu as MenuIcon, Tag, BarChart2, Smile, ChevronDown, ChevronUp, PenSquare, ChevronLeft, Route, ExternalLink, ChefHat, Utensils, DollarSign, PanelLeftClose, PanelRightClose, MessageCircle } from 'lucide-react';
+import { Pizza, Plus, ArrowLeft, LogOut, Trash2, Search, X, Package, Settings, Menu as MenuIcon, Tag, BarChart2, Smile, ChevronDown, ChevronUp, PenSquare, ChevronLeft, Route, ExternalLink, ChefHat, Utensils, DollarSign, PanelLeftClose, PanelRightClose, MessageCircle, Phone } from 'lucide-react';
 import { useNavigate, useParams, Navigate, Link, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import AdminDeliveryMap from '../components/AdminDeliveryMap';
