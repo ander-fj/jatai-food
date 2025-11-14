@@ -37,43 +37,51 @@ const WhatsAppChatInterface: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const messagesRef = ref(database, `whatsapp_messages/${username}`);
+    const conversationsRef = ref(database, `tenants/${username}/whatsapp/conversations`);
 
-    const unsubscribe = onValue(messagesRef, (snapshot) => {
+    console.log('👂 Ouvindo conversas em:', `tenants/${username}/whatsapp/conversations`);
+
+    const unsubscribe = onValue(conversationsRef, (snapshot) => {
       if (snapshot.exists()) {
+        console.log('✅ Conversas encontradas!', snapshot.val());
         const data = snapshot.val();
         const chatsMap: { [key: string]: Chat } = {};
 
-        Object.entries(data).forEach(([phoneNumber, messages]: [string, any]) => {
+        Object.entries(data).forEach(([phoneNumber, conversation]: [string, any]) => {
           const messagesList: Message[] = [];
           let unreadCount = 0;
 
-          Object.entries(messages).forEach(([msgId, msg]: [string, any]) => {
-            messagesList.push({
-              id: msgId,
-              from: msg.from,
-              to: msg.to,
-              body: msg.body,
-              timestamp: msg.timestamp,
-              isFromCustomer: msg.isFromCustomer,
-              status: msg.status
-            });
+          if (conversation.messages) {
+            Object.entries(conversation.messages).forEach(([msgId, msg]: [string, any]) => {
+              messagesList.push({
+                id: msgId,
+                from: msg.from,
+                to: msg.to,
+                body: msg.body,
+                timestamp: msg.timestamp,
+                isFromCustomer: msg.isFromCustomer,
+                isFromAI: msg.isFromAI,
+                status: msg.status
+              });
 
-            if (msg.isFromCustomer && msg.status !== 'read') {
-              unreadCount++;
-            }
-          });
+              if (msg.isFromCustomer && msg.status !== 'read') {
+                unreadCount++;
+              }
+            });
+          }
 
           messagesList.sort((a, b) => a.timestamp - b.timestamp);
 
           const lastMsg = messagesList[messagesList.length - 1];
           chatsMap[phoneNumber] = {
             phoneNumber,
-            customerName: messages.customerName || phoneNumber,
+            customerName: conversation.customerName || phoneNumber,
             lastMessage: lastMsg?.body || '',
             lastMessageTime: lastMsg?.timestamp || 0,
             unreadCount,
-            messages: messagesList
+            messages: messagesList,
+            isAIHandling: conversation.isAIHandling,
+            transferredToHuman: conversation.transferredToHuman
           };
         });
 
@@ -81,8 +89,10 @@ const WhatsAppChatInterface: React.FC = () => {
           (a, b) => b.lastMessageTime - a.lastMessageTime
         );
 
+        console.log('📊 Total de conversas:', chatsList.length);
         setChats(chatsList);
       } else {
+        console.log('⚠️ Nenhuma conversa encontrada');
         setChats([]);
       }
     });
