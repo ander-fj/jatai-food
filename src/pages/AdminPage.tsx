@@ -7,7 +7,7 @@ import AdminOrdersMap from '../components/AdminOrdersMap';
 import AdminEntregadorSelector from '../components/AdminEntregadorSelector';
 import WhatsAppAttendanceSection from '../components/WhatsAppAttendanceSection';
 import WhatsAppBusinessSection from '../components/WhatsAppBusinessSection';
-import WhatsAppChatInterface from '../components/WhatsAppChatInterface';
+import WhatsAppChatBox from '../components/WhatsAppChatBox';
 import WhatsAppQRCodeSimple from '../components/WhatsAppQRCodeSimple';
 import WhatsAppMessageSimulator from '../components/WhatsAppMessageSimulator';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
@@ -540,7 +540,7 @@ const AdminPage: React.FC = () => {
             </div>
           </div>
           <div className={activeTab === 'atendimento-whatsapp' ? '' : 'hidden'}>
-            <WhatsAppChatInterface />
+            <WhatsAppChatBox />
           </div>
           <div className={activeTab === 'configuracoes' ? '' : 'hidden'}>
             <div className="p-6 bg-white rounded-lg shadow-sm">
