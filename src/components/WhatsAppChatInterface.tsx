@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, Phone, User, Search, X, Clock, CheckCheck, Check } from 'lucide-react';
+import { MessageCircle, Send, Phone, User, Search, X, Clock, CheckCheck, Check, Bot, UserCircle, AlertCircle } from 'lucide-react';
 import { database } from '../config/firebase';
 import { ref, onValue, push, set, get, serverTimestamp } from 'firebase/database';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ interface Message {
   body: string;
   timestamp: number;
   isFromCustomer: boolean;
+  isFromAI?: boolean;
   status?: 'sent' | 'delivered' | 'read';
 }
 
@@ -21,6 +22,8 @@ interface Chat {
   lastMessageTime: number;
   unreadCount: number;
   messages: Message[];
+  isAIHandling?: boolean;
+  transferredToHuman?: boolean;
 }
 
 const WhatsAppChatInterface: React.FC = () => {
@@ -30,6 +33,7 @@ const WhatsAppChatInterface: React.FC = () => {
   const [messageText, setMessageText] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'ai' | 'human'>('all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -117,6 +121,21 @@ const WhatsAppChatInterface: React.FC = () => {
     }
   };
 
+  const transferToHuman = async (phoneNumber: string) => {
+    try {
+      const chatRef = ref(database, `whatsapp_chats/${username}/${phoneNumber}`);
+      await set(chatRef, {
+        transferredToHuman: true,
+        isAIHandling: false,
+        transferredAt: Date.now()
+      });
+      toast.success('Conversa transferida para atendimento humano');
+    } catch (error) {
+      console.error('Erro ao transferir:', error);
+      toast.error('Erro ao transferir conversa');
+    }
+  };
+
   const sendMessage = async () => {
     if (!messageText.trim() || !selectedChat || isSending) return;
 
@@ -131,6 +150,13 @@ const WhatsAppChatInterface: React.FC = () => {
       }
 
       const config = configSnap.val();
+
+      const chatRef = ref(database, `whatsapp_chats/${username}/${selectedChat}`);
+      await set(chatRef, {
+        transferredToHuman: true,
+        isAIHandling: false
+      });
+
       const messagesRef = ref(database, `whatsapp_messages/${username}/${selectedChat}`);
       const newMessageRef = push(messagesRef);
 
@@ -140,6 +166,7 @@ const WhatsAppChatInterface: React.FC = () => {
         body: messageText,
         timestamp: Date.now(),
         isFromCustomer: false,
+        isFromAI: false,
         status: 'sent'
       };
 
@@ -195,10 +222,20 @@ const WhatsAppChatInterface: React.FC = () => {
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   };
 
-  const filteredChats = chats.filter(chat =>
-    chat.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    chat.phoneNumber.includes(searchTerm)
-  );
+  const filteredChats = chats.filter(chat => {
+    const matchesSearch = chat.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      chat.phoneNumber.includes(searchTerm);
+
+    if (!matchesSearch) return false;
+
+    if (filter === 'ai') {
+      return chat.isAIHandling && !chat.transferredToHuman;
+    }
+    if (filter === 'human') {
+      return chat.transferredToHuman;
+    }
+    return true;
+  });
 
   const currentChat = chats.find(c => c.phoneNumber === selectedChat);
 
@@ -212,7 +249,7 @@ const WhatsAppChatInterface: React.FC = () => {
           </h2>
         </div>
 
-        <div className="p-3 border-b border-gray-200">
+        <div className="p-3 border-b border-gray-200 space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
@@ -230,6 +267,34 @@ const WhatsAppChatInterface: React.FC = () => {
                 <X className="h-4 w-4 text-gray-400 hover:text-gray-600" />
               </button>
             )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilter('all')}
+              className={`flex-1 py-1.5 px-3 rounded text-sm font-medium transition-colors ${
+                filter === 'all' ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setFilter('ai')}
+              className={`flex-1 py-1.5 px-3 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
+                filter === 'ai' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Bot className="h-4 w-4" />
+              IA
+            </button>
+            <button
+              onClick={() => setFilter('human')}
+              className={`flex-1 py-1.5 px-3 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
+                filter === 'human' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <UserCircle className="h-4 w-4" />
+              Humano
+            </button>
           </div>
         </div>
 
@@ -255,9 +320,23 @@ const WhatsAppChatInterface: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="font-semibold text-gray-900 truncate">
-                        {chat.customerName}
-                      </h3>
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 truncate">
+                          {chat.customerName}
+                        </h3>
+                        {chat.isAIHandling && !chat.transferredToHuman && (
+                          <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                            <Bot className="h-3 w-3" />
+                            IA
+                          </span>
+                        )}
+                        {chat.transferredToHuman && (
+                          <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                            <UserCircle className="h-3 w-3" />
+                            Humano
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-gray-500">
                         {formatTime(chat.lastMessageTime)}
                       </span>
@@ -288,9 +367,32 @@ const WhatsAppChatInterface: React.FC = () => {
                 {currentChat.customerName.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-gray-900">{currentChat.customerName}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-gray-900">{currentChat.customerName}</h3>
+                  {currentChat.isAIHandling && !currentChat.transferredToHuman && (
+                    <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                      <Bot className="h-3 w-3" />
+                      Atendido por IA
+                    </span>
+                  )}
+                  {currentChat.transferredToHuman && (
+                    <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                      <UserCircle className="h-3 w-3" />
+                      Atendimento Humano
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-gray-500">{currentChat.phoneNumber}</p>
               </div>
+              {currentChat.isAIHandling && !currentChat.transferredToHuman && (
+                <button
+                  onClick={() => transferToHuman(currentChat.phoneNumber)}
+                  className="px-3 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2 text-sm font-medium"
+                >
+                  <UserCircle className="h-4 w-4" />
+                  Assumir Atendimento
+                </button>
+              )}
               <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <Phone className="h-5 w-5 text-gray-600" />
               </button>
@@ -302,19 +404,28 @@ const WhatsAppChatInterface: React.FC = () => {
                   key={msg.id}
                   className={`flex ${msg.isFromCustomer ? 'justify-start' : 'justify-end'}`}
                 >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      msg.isFromCustomer
-                        ? 'bg-white text-gray-900'
-                        : 'bg-emerald-500 text-white'
-                    }`}
-                  >
-                    <p className="break-words">{msg.body}</p>
-                    <div className="flex items-center justify-end gap-1 mt-1">
-                      <span className={`text-xs ${msg.isFromCustomer ? 'text-gray-500' : 'text-emerald-100'}`}>
-                        {formatTime(msg.timestamp)}
+                  <div className="flex flex-col items-end gap-1">
+                    {!msg.isFromCustomer && msg.isFromAI && (
+                      <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                        <Bot className="h-3 w-3" />
+                        Resposta automática
                       </span>
-                      {!msg.isFromCustomer && (
+                    )}
+                    <div
+                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                        msg.isFromCustomer
+                          ? 'bg-white text-gray-900'
+                          : msg.isFromAI
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-emerald-500 text-white'
+                      }`}
+                    >
+                      <p className="break-words">{msg.body}</p>
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        <span className={`text-xs ${msg.isFromCustomer ? 'text-gray-500' : msg.isFromAI ? 'text-blue-100' : 'text-emerald-100'}`}>
+                          {formatTime(msg.timestamp)}
+                        </span>
+                        {!msg.isFromCustomer && (
                         <span>
                           {msg.status === 'read' ? (
                             <CheckCheck className="h-3 w-3 text-blue-300" />
@@ -325,6 +436,7 @@ const WhatsAppChatInterface: React.FC = () => {
                           )}
                         </span>
                       )}
+                      </div>
                     </div>
                   </div>
                 </div>
