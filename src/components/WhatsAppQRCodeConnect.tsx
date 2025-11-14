@@ -8,8 +8,12 @@ const WhatsAppQRCodeConnect: React.FC = () => {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [serverUrl, setServerUrl] = useState<string>(
+    localStorage.getItem('whatsapp_server_url') || 'http://localhost:3001'
+  );
+  const [showConfig, setShowConfig] = useState(false);
 
-  const SERVER_URL = 'https://whatsapp-server-xt8l.onrender.com';
+  const SERVER_URL = serverUrl;
 
   useEffect(() => {
     checkStatus();
@@ -17,9 +21,20 @@ const WhatsAppQRCodeConnect: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const saveServerUrl = () => {
+    localStorage.setItem('whatsapp_server_url', serverUrl);
+    toast.success('URL do servidor salva!');
+    setShowConfig(false);
+    checkStatus();
+  };
+
   const checkStatus = async () => {
     try {
-      const response = await fetch(`${SERVER_URL}/api/whatsapp/status/${username}`);
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/status/${username}`, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       const data = await response.json();
 
       if (data.success) {
@@ -123,15 +138,65 @@ const WhatsAppQRCodeConnect: React.FC = () => {
           <p className="text-gray-600">
             Use o WhatsApp Web do seu celular para escanear o QR Code
           </p>
+          <button
+            onClick={() => setShowConfig(!showConfig)}
+            className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+          >
+            ⚙️ Configurar URL do Servidor
+          </button>
         </div>
+
+        {showConfig && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              URL do Servidor WhatsApp:
+            </label>
+            <input
+              type="text"
+              value={serverUrl}
+              onChange={(e) => setServerUrl(e.target.value)}
+              placeholder="http://localhost:3001"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={saveServerUrl}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Salvar
+              </button>
+              <button
+                onClick={() => setShowConfig(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Cancelar
+              </button>
+            </div>
+            <p className="text-xs text-gray-600 mt-2">
+              Servidor local: <code className="bg-gray-200 px-1 rounded">http://localhost:3001</code>
+            </p>
+          </div>
+        )}
 
         {status === 'disconnected' && (
           <div className="text-center">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-              <AlertCircle className="h-5 w-5 text-yellow-600 mx-auto mb-2" />
-              <p className="text-sm text-yellow-800">
-                WhatsApp não conectado. Clique no botão abaixo para gerar o QR Code.
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <AlertCircle className="h-5 w-5 text-red-600 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-red-800 mb-2">
+                ⚠️ Servidor WhatsApp não está rodando!
               </p>
+              <p className="text-xs text-red-700 mb-3">
+                Você precisa iniciar o servidor antes de conectar.
+              </p>
+              <div className="bg-white rounded p-3 text-left">
+                <p className="text-xs font-semibold text-gray-900 mb-1">1. Abra o terminal:</p>
+                <code className="block bg-gray-900 text-green-400 text-xs p-2 rounded mb-2">
+                  cd server<br/>
+                  npm install<br/>
+                  node whatsapp-server.js
+                </code>
+                <p className="text-xs font-semibold text-gray-900 mb-1">2. Depois clique em "Conectar WhatsApp"</p>
+              </div>
             </div>
             <button
               onClick={startConnection}
