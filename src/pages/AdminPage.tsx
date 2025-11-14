@@ -9,6 +9,7 @@ import WhatsAppAttendanceSection from '../components/WhatsAppAttendanceSection';
 import WhatsAppBusinessSection from '../components/WhatsAppBusinessSection';
 import WhatsAppChatInterface from '../components/WhatsAppChatInterface';
 import WhatsAppQRCodeSimple from '../components/WhatsAppQRCodeSimple';
+import WhatsAppSetupGuide from '../components/WhatsAppSetupGuide';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import SystemConfigurationModal from '../components/SystemConfigurationModal';
 import WhatsAppPromotionSection from '../components/WhatsAppPromotionSection';
@@ -534,7 +535,15 @@ const AdminPage: React.FC = () => {
           <div className={activeTab === 'piadas' ? '' : 'hidden'}><div className="p-6 bg-white rounded-lg shadow-sm"><h2 className="text-2xl font-bold mb-4">Gerenciamento de Piadas</h2><AdminJokesManagement /></div></div>
           <div className={activeTab === 'conectar-whatsapp' ? '' : 'hidden'}>
             <div className="p-6">
-              <WhatsAppQRCodeSimple />
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6">
+                <p className="text-yellow-800 font-semibold">
+                  ⚠️ Para o WhatsApp funcionar de verdade, você precisa configurar a API oficial do WhatsApp Business.
+                </p>
+                <p className="text-yellow-700 text-sm mt-1">
+                  Veja o guia completo abaixo de como configurar gratuitamente (1000 mensagens/mês grátis).
+                </p>
+              </div>
+              <WhatsAppSetupGuide />
             </div>
           </div>
           <div className={activeTab === 'atendimento-whatsapp' ? '' : 'hidden'}>
