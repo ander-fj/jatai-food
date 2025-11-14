@@ -6,6 +6,7 @@ import AdminDeliveryMap from '../components/AdminDeliveryMap';
 import AdminOrdersMap from '../components/AdminOrdersMap';
 import AdminEntregadorSelector from '../components/AdminEntregadorSelector';
 import WhatsAppAttendanceSection from '../components/WhatsAppAttendanceSection';
+import WhatsAppBusinessSection from '../components/WhatsAppBusinessSection';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import SystemConfigurationModal from '../components/SystemConfigurationModal';
 import WhatsAppPromotionSection from '../components/WhatsAppPromotionSection';
