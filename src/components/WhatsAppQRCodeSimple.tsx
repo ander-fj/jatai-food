@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Loader, AlertCircle, Smartphone, Phone, MessageCircle, Bug } from 'lucide-react';
+import { CheckCircle, Loader, AlertCircle, Smartphone, Phone, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { ref, set, onValue, off, push, get } from 'firebase/database';
+import { ref, set, onValue, off, push } from 'firebase/database';
 import { database } from '../config/firebase';
 
 const WhatsAppQRCodeSimple: React.FC = () => {
@@ -58,13 +58,10 @@ const WhatsAppQRCodeSimple: React.FC = () => {
     }
 
     setIsLoading(true);
-    console.log('🔄 Iniciando conexão WhatsApp...', { username, phoneNumber, businessName });
 
     try {
       const cleanPhone = phoneNumber.replace(/\D/g, '');
-      console.log('📞 Número limpo:', cleanPhone);
 
-      console.log('💾 Salvando configuração no Firebase...');
       await set(ref(database, `tenants/${username}/whatsapp`), {
         phoneNumber: cleanPhone,
         businessName: businessName.trim(),
@@ -72,21 +69,17 @@ const WhatsAppQRCodeSimple: React.FC = () => {
         connectedAt: Date.now(),
         token: WHATSAPP_TOKEN,
       });
-      console.log('✅ Configuração salva!');
 
-      console.log('🔗 Configurando webhook...');
       const webhookRef = ref(database, `tenants/${username}/whatsapp/webhook`);
       await set(webhookRef, {
         url: `https://${window.location.hostname}/api/whatsapp/webhook`,
         enabled: true,
         events: ['messages', 'message_status'],
       });
-      console.log('✅ Webhook configurado!');
 
       setStatus('connected');
-      toast.success('WhatsApp conectado com sucesso! 🎉');
+      toast.success('WhatsApp conectado com sucesso!');
 
-      console.log('📨 Enviando mensagem de boas-vindas...');
       const testMessageRef = push(ref(database, `tenants/${username}/whatsapp/messages`));
       await set(testMessageRef, {
         from: 'system',
@@ -96,13 +89,10 @@ const WhatsAppQRCodeSimple: React.FC = () => {
         type: 'welcome',
         status: 'sent',
       });
-      console.log('✅ Mensagem enviada!');
-      console.log('🎊 WhatsApp conectado com sucesso!');
 
     } catch (error: any) {
-      console.error('❌ Erro ao conectar WhatsApp:', error);
-      console.error('Stack trace:', error.stack);
-      toast.error(`Erro ao conectar: ${error.message || 'Erro desconhecido'}`);
+      console.error('Erro ao conectar:', error);
+      toast.error('Erro ao conectar WhatsApp. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -120,42 +110,6 @@ const WhatsAppQRCodeSimple: React.FC = () => {
       toast.error('Erro ao desconectar: ' + error.message);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const testFirebaseConnection = async () => {
-    console.log('🧪 Testando conexão Firebase...');
-    toast.info('Testando conexão...');
-
-    try {
-      const testRef = ref(database, `tenants/${username}/whatsapp/test`);
-      const testData = {
-        timestamp: Date.now(),
-        message: 'Teste de conexão',
-        username: username,
-      };
-
-      console.log('💾 Salvando dados de teste...', testData);
-      await set(testRef, testData);
-      console.log('✅ Dados salvos!');
-
-      console.log('📖 Lendo dados de teste...');
-      const snapshot = await get(testRef);
-
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        console.log('✅ Dados lidos:', data);
-        toast.success('Conexão Firebase OK! ✅');
-        return true;
-      } else {
-        console.error('❌ Dados não encontrados');
-        toast.error('Erro: dados não salvos');
-        return false;
-      }
-    } catch (error: any) {
-      console.error('❌ Erro no teste:', error);
-      toast.error(`Erro: ${error.message}`);
-      return false;
     }
   };
 
@@ -245,34 +199,23 @@ const WhatsAppQRCodeSimple: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <button
-                onClick={connectWhatsApp}
-                disabled={isLoading || !phoneNumber || !businessName}
-                className="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 font-semibold text-lg shadow-lg"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader className="h-5 w-5 animate-spin" />
-                    Conectando WhatsApp...
-                  </>
-                ) : (
-                  <>
-                    <MessageCircle className="h-5 w-5" />
-                    Conectar WhatsApp Business
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={testFirebaseConnection}
-                disabled={isLoading}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 transition-colors flex items-center justify-center gap-2 text-sm"
-              >
-                <Bug className="h-4 w-4" />
-                Testar Conexão Firebase
-              </button>
-            </div>
+            <button
+              onClick={connectWhatsApp}
+              disabled={isLoading || !phoneNumber || !businessName}
+              className="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 font-semibold text-lg shadow-lg"
+            >
+              {isLoading ? (
+                <>
+                  <Loader className="h-5 w-5 animate-spin" />
+                  Conectando WhatsApp...
+                </>
+              ) : (
+                <>
+                  <MessageCircle className="h-5 w-5" />
+                  Conectar WhatsApp Business
+                </>
+              )}
+            </button>
 
             <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h4 className="font-semibold text-gray-900 mb-3 text-sm">
