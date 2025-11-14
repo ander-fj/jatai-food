@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,7 +44,7 @@ interface WhatsAppMessage {
   }>
 }
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
 
                 const username = url.searchParams.get("username") || "A"
 
-                const firebaseUrl = `https://ta-no-controle-default-rtdb.firebaseio.com/whatsapp_messages/${username}/${from}/${messageId}.json`
+                const firebaseUrl = `https://jataifood-default-rtdb.firebaseio.com/whatsapp_messages/${username}/${from}/${messageId}.json`
 
                 const messageData = {
                   id: messageId,

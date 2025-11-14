@@ -9,7 +9,6 @@ import WhatsAppAttendanceSection from '../components/WhatsAppAttendanceSection';
 import WhatsAppBusinessSection from '../components/WhatsAppBusinessSection';
 import WhatsAppChatBox from '../components/WhatsAppChatBox';
 import WhatsAppQRCodeSimple from '../components/WhatsAppQRCodeSimple';
-import WhatsAppRealConfig from '../components/WhatsAppRealConfig';
 import WhatsAppMessageSimulator from '../components/WhatsAppMessageSimulator';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import SystemConfigurationModal from '../components/SystemConfigurationModal';
@@ -537,7 +536,7 @@ const AdminPage: React.FC = () => {
           <div className={activeTab === 'piadas' ? '' : 'hidden'}><div className="p-6 bg-white rounded-lg shadow-sm"><h2 className="text-2xl font-bold mb-4">Gerenciamento de Piadas</h2><AdminJokesManagement /></div></div>
           <div className={activeTab === 'conectar-whatsapp' ? '' : 'hidden'}>
             <div className="p-6">
-              <WhatsAppRealConfig />
+              <WhatsAppQRCodeSimple />
             </div>
           </div>
           <div className={activeTab === 'atendimento-whatsapp' ? '' : 'hidden'}>

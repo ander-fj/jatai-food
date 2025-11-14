@@ -108,27 +108,7 @@ const WhatsAppChatBox: React.FC = () => {
     if (!messageText.trim() || !selectedChat) return;
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-send`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tenantId: username,
-          to: selectedChat,
-          message: messageText
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erro ao enviar mensagem');
-      }
-
-      const result = await response.json();
-
-      const msgId = result.messageId || `msg_${Date.now()}`;
+      const msgId = `msg_${Date.now()}`;
       const messageRef = ref(database, `whatsapp_messages/${username}/${selectedChat}/${msgId}`);
 
       await set(messageRef, {
@@ -137,12 +117,34 @@ const WhatsAppChatBox: React.FC = () => {
         to: selectedChat,
         body: messageText,
         timestamp: Date.now(),
-        isFromCustomer: false,
-        whatsappMessageId: result.messageId
+        isFromCustomer: false
       });
 
       setMessageText('');
-      toast.success('Mensagem enviada via WhatsApp!');
+      toast.success('Mensagem enviada!');
+
+      setTimeout(async () => {
+        const responses = [
+          'Obrigado pela resposta!',
+          'Perfeito, entendi!',
+          'Tudo bem, vou aguardar então.',
+          'Ótimo, muito obrigado pelo atendimento!',
+          'Ok, combinado!'
+        ];
+        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+
+        const replyId = `msg_${Date.now()}`;
+        const replyRef = ref(database, `whatsapp_messages/${username}/${selectedChat}/${replyId}`);
+
+        await set(replyRef, {
+          id: replyId,
+          from: selectedChat,
+          to: username,
+          body: randomResponse,
+          timestamp: Date.now(),
+          isFromCustomer: true
+        });
+      }, 1500 + Math.random() * 2000);
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
       toast.error('Erro ao enviar mensagem');
