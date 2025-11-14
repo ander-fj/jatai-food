@@ -7,8 +7,10 @@ import AdminOrdersMap from '../components/AdminOrdersMap';
 import AdminEntregadorSelector from '../components/AdminEntregadorSelector';
 import WhatsAppAttendanceSection from '../components/WhatsAppAttendanceSection';
 import WhatsAppBusinessSection from '../components/WhatsAppBusinessSection';
-import WhatsAppChatInterface from '../components/WhatsAppChatInterface';
+import WhatsAppChatBox from '../components/WhatsAppChatBox';
 import WhatsAppQRCodeSimple from '../components/WhatsAppQRCodeSimple';
+import WhatsAppRealConfig from '../components/WhatsAppRealConfig';
+import WhatsAppMessageSimulator from '../components/WhatsAppMessageSimulator';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import SystemConfigurationModal from '../components/SystemConfigurationModal';
 import WhatsAppPromotionSection from '../components/WhatsAppPromotionSection';
@@ -382,6 +384,7 @@ const AdminPage: React.FC = () => {
         ></div>
       )}
 
+      <WhatsAppMessageSimulator />
       <div className={`fixed lg:relative bg-gray-800 text-white flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-30 h-full ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <div className={`px-4 lg:px-8 py-4 bg-gray-800 flex flex-col items-center gap-2 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
             <img src="/jatai.png" alt="Jatai" className={`rounded-full object-cover transition-all duration-300 ${isSidebarCollapsed ? 'h-10 w-10' : 'h-21 w-21'}`} />
@@ -534,11 +537,11 @@ const AdminPage: React.FC = () => {
           <div className={activeTab === 'piadas' ? '' : 'hidden'}><div className="p-6 bg-white rounded-lg shadow-sm"><h2 className="text-2xl font-bold mb-4">Gerenciamento de Piadas</h2><AdminJokesManagement /></div></div>
           <div className={activeTab === 'conectar-whatsapp' ? '' : 'hidden'}>
             <div className="p-6">
-              <WhatsAppQRCodeSimple />
+              <WhatsAppRealConfig />
             </div>
           </div>
           <div className={activeTab === 'atendimento-whatsapp' ? '' : 'hidden'}>
-            <WhatsAppChatInterface />
+            <WhatsAppChatBox />
           </div>
           <div className={activeTab === 'configuracoes' ? '' : 'hidden'}>
             <div className="p-6 bg-white rounded-lg shadow-sm">
