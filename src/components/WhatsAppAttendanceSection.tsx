@@ -372,21 +372,40 @@ const WhatsAppAttendanceSection: React.FC = () => {
           <div className="flex items-start gap-3">
             <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-red-900 mb-2">Servidor WhatsApp Offline</h3>
-              <p className="text-sm text-red-800 mb-3">
-                Não foi possível conectar ao servidor WhatsApp. Verifique:
+              <h3 className="text-lg font-semibold text-red-900 mb-3">🚨 Servidor WhatsApp Offline</h3>
+              <p className="text-sm text-red-800 mb-3 font-medium">
+                O servidor Node.js do WhatsApp não está respondendo. Siga os passos abaixo:
               </p>
-              <ul className="text-sm text-red-800 space-y-1 list-disc list-inside mb-3">
-                <li>O servidor Node.js está rodando na pasta "server"</li>
-                <li>Execute: <code className="bg-red-100 px-2 py-1 rounded">cd server && npm start</code></li>
-                <li>URL do servidor: <code className="bg-red-100 px-2 py-1 rounded">{WHATSAPP_SERVER_URL}</code></li>
-              </ul>
+
+              <div className="bg-white rounded-lg p-4 mb-4">
+                <p className="text-sm font-semibold text-gray-800 mb-2">📋 Passo a Passo:</p>
+                <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
+                  <li>Abra um terminal na pasta raiz do projeto</li>
+                  <li>Execute: <code className="bg-gray-100 px-2 py-1 rounded font-mono text-xs">cd server</code></li>
+                  <li>Instale as dependências (primeira vez): <code className="bg-gray-100 px-2 py-1 rounded font-mono text-xs">npm install</code></li>
+                  <li>Configure o arquivo <code className="bg-gray-100 px-2 py-1 rounded font-mono text-xs">.env</code> na pasta server</li>
+                  <li>Inicie o servidor: <code className="bg-gray-100 px-2 py-1 rounded font-mono text-xs">npm start</code></li>
+                </ol>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                <p className="text-xs text-yellow-800">
+                  <strong>⚙️ Configuração necessária:</strong> O arquivo <code className="bg-yellow-100 px-1 rounded">.env</code>
+                  deve conter as variáveis Firebase e a porta 3001
+                </p>
+              </div>
+
+              <div className="bg-gray-100 rounded-lg p-3 mb-4">
+                <p className="text-xs text-gray-600 mb-1">URL do servidor configurada:</p>
+                <code className="text-xs text-gray-800 font-mono break-all">{WHATSAPP_SERVER_URL}</code>
+              </div>
+
               <button
                 onClick={checkConnectionStatus}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium shadow-md hover:shadow-lg"
               >
                 <RefreshCw className="h-4 w-4" />
-                Tentar Novamente
+                Verificar Conexão Novamente
               </button>
             </div>
           </div>
