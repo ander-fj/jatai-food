@@ -370,9 +370,9 @@ const WhatsAppAttendanceSection: React.FC = () => {
         <div className="mt-4 flex gap-3">
           {!connectionStatus.isConnected ? (
             <button
-              onClick={connectWhatsApp} // Removida a dependência da chave Gemini
+              onClick={connectWhatsApp}
               disabled={isConnecting}
-              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg transform hover:scale-[1.02] active:scale-[0.98]"
             >
               <Power className="h-5 w-5" />
               {isConnecting ? 'Conectando...' : 'Conectar WhatsApp'}
