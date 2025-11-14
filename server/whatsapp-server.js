@@ -108,6 +108,15 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Rota de health check para verificar se o servidor está online.
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'UP',
+    timestamp: new Date().toISOString(),
+    message: 'Server is alive'
+  });
+});
+
 // --- Gerenciamento de Clientes WhatsApp ---
 const clients = {};
 
