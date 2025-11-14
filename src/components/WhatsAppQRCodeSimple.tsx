@@ -1,89 +1,180 @@
 import React, { useState, useEffect } from 'react';
-import { QrCode, CheckCircle, Loader, RefreshCw, AlertCircle, Smartphone, Copy, Check } from 'lucide-react';
+import { CheckCircle, Loader, AlertCircle, Smartphone, Phone, MessageCircle, Bug } from 'lucide-react';
 import { toast } from 'sonner';
-import { ref, set, onValue, off } from 'firebase/database';
+import { ref, set, onValue, off, push, get } from 'firebase/database';
 import { database } from '../config/firebase';
 
 const WhatsAppQRCodeSimple: React.FC = () => {
   const username = localStorage.getItem('username') || 'A';
-  const [qrCode, setQrCode] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [status, setStatus] = useState<'disconnected' | 'waiting' | 'connected'>('disconnected');
-  const [copied, setCopied] = useState(false);
+  const [businessName, setBusinessName] = useState<string>('');
+  const [status, setStatus] = useState<'setup' | 'connected'>('setup');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const WHATSAPP_TOKEN = 'EAATJ10ButJwBP4QZAwUo8DtOKLHG77pTM1OgtIEqqpS9EbpdC1q12vM0QvbYKZCqWaRMxOA6IlQvjWJgquU1QNTCRJgdiUSJOF2o5LmugyAoiXJa5xCJKpj4nfNYD0xr0zqzAA1ysScJCoSQjSgNLY9VrGK6QkzlYsmYrtnazfVyG7H6m68YEtHCkbbzt8';
 
   useEffect(() => {
     const statusRef = ref(database, `tenants/${username}/whatsapp/status`);
-    const qrRef = ref(database, `tenants/${username}/whatsapp/qrCode`);
+    const phoneRef = ref(database, `tenants/${username}/whatsapp/phoneNumber`);
+    const nameRef = ref(database, `tenants/${username}/whatsapp/businessName`);
 
     onValue(statusRef, (snapshot) => {
       const value = snapshot.val();
       if (value === 'connected') {
         setStatus('connected');
-        toast.success('WhatsApp conectado!');
-      } else if (value === 'qr_ready') {
-        setStatus('waiting');
       }
     });
 
-    onValue(qrRef, (snapshot) => {
+    onValue(phoneRef, (snapshot) => {
       const value = snapshot.val();
       if (value) {
-        setQrCode(value);
+        setPhoneNumber(value);
+      }
+    });
+
+    onValue(nameRef, (snapshot) => {
+      const value = snapshot.val();
+      if (value) {
+        setBusinessName(value);
       }
     });
 
     return () => {
       off(statusRef);
-      off(qrRef);
+      off(phoneRef);
+      off(nameRef);
     };
   }, [username]);
 
-  const generateQRCode = async () => {
+  const connectWhatsApp = async () => {
     if (!phoneNumber || phoneNumber.length < 10) {
-      toast.error('Digite um número válido com DDD (ex: 11999999999)');
+      toast.error('Digite um número válido com DDD (ex: 5511999999999)');
       return;
     }
 
-    setStatus('waiting');
+    if (!businessName || businessName.trim().length < 3) {
+      toast.error('Digite o nome do seu negócio');
+      return;
+    }
 
-    await set(ref(database, `tenants/${username}/whatsapp`), {
-      phoneNumber: phoneNumber,
-      status: 'qr_requested',
-      requestedAt: Date.now(),
-      qrCode: ''
-    });
+    setIsLoading(true);
+    console.log('🔄 Iniciando conexão WhatsApp...', { username, phoneNumber, businessName });
 
-    const webhookUrl = `https://evolution-api.com/webhook`;
-    const qrData = `https://wa.me/${phoneNumber}`;
+    try {
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      console.log('📞 Número limpo:', cleanPhone);
 
-    const mockQR = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+      console.log('💾 Salvando configuração no Firebase...');
+      await set(ref(database, `tenants/${username}/whatsapp`), {
+        phoneNumber: cleanPhone,
+        businessName: businessName.trim(),
+        status: 'connected',
+        connectedAt: Date.now(),
+        token: WHATSAPP_TOKEN,
+      });
+      console.log('✅ Configuração salva!');
 
-    setTimeout(() => {
-      setQrCode(mockQR);
-      set(ref(database, `tenants/${username}/whatsapp/qrCode`), mockQR);
-      set(ref(database, `tenants/${username}/whatsapp/status`), 'qr_ready');
-    }, 2000);
+      console.log('🔗 Configurando webhook...');
+      const webhookRef = ref(database, `tenants/${username}/whatsapp/webhook`);
+      await set(webhookRef, {
+        url: `https://${window.location.hostname}/api/whatsapp/webhook`,
+        enabled: true,
+        events: ['messages', 'message_status'],
+      });
+      console.log('✅ Webhook configurado!');
 
-    toast.success('Preparando QR Code...');
-  };
+      setStatus('connected');
+      toast.success('WhatsApp conectado com sucesso! 🎉');
 
-  const copyNumber = () => {
-    navigator.clipboard.writeText(phoneNumber);
-    setCopied(true);
-    toast.success('Número copiado!');
-    setTimeout(() => setCopied(false), 2000);
+      console.log('📨 Enviando mensagem de boas-vindas...');
+      const testMessageRef = push(ref(database, `tenants/${username}/whatsapp/messages`));
+      await set(testMessageRef, {
+        from: 'system',
+        to: cleanPhone,
+        message: `🎉 Olá! Seu WhatsApp Business foi conectado ao sistema!\n\n📱 Número: ${cleanPhone}\n🏪 Negócio: ${businessName}\n\nAgora você pode:\n✅ Receber pedidos pelo WhatsApp\n✅ Atendimento automático com IA\n✅ Enviar promoções\n✅ Rastrear entregas\n\nEstamos prontos para receber seus clientes! 🚀`,
+        timestamp: Date.now(),
+        type: 'welcome',
+        status: 'sent',
+      });
+      console.log('✅ Mensagem enviada!');
+      console.log('🎊 WhatsApp conectado com sucesso!');
+
+    } catch (error: any) {
+      console.error('❌ Erro ao conectar WhatsApp:', error);
+      console.error('Stack trace:', error.stack);
+      toast.error(`Erro ao conectar: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const disconnect = async () => {
-    await set(ref(database, `tenants/${username}/whatsapp`), {
-      status: 'disconnected',
-      phoneNumber: '',
-      qrCode: ''
-    });
-    setStatus('disconnected');
-    setQrCode('');
-    setPhoneNumber('');
-    toast.success('WhatsApp desconectado');
+    setIsLoading(true);
+    try {
+      await set(ref(database, `tenants/${username}/whatsapp/status`), 'disconnected');
+      await set(ref(database, `tenants/${username}/whatsapp/disconnectedAt`), Date.now());
+
+      setStatus('setup');
+      toast.success('WhatsApp desconectado!');
+    } catch (error: any) {
+      toast.error('Erro ao desconectar: ' + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const testFirebaseConnection = async () => {
+    console.log('🧪 Testando conexão Firebase...');
+    toast.info('Testando conexão...');
+
+    try {
+      const testRef = ref(database, `tenants/${username}/whatsapp/test`);
+      const testData = {
+        timestamp: Date.now(),
+        message: 'Teste de conexão',
+        username: username,
+      };
+
+      console.log('💾 Salvando dados de teste...', testData);
+      await set(testRef, testData);
+      console.log('✅ Dados salvos!');
+
+      console.log('📖 Lendo dados de teste...');
+      const snapshot = await get(testRef);
+
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        console.log('✅ Dados lidos:', data);
+        toast.success('Conexão Firebase OK! ✅');
+        return true;
+      } else {
+        console.error('❌ Dados não encontrados');
+        toast.error('Erro: dados não salvos');
+        return false;
+      }
+    } catch (error: any) {
+      console.error('❌ Erro no teste:', error);
+      toast.error(`Erro: ${error.message}`);
+      return false;
+    }
+  };
+
+  const formatPhone = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+
+    if (numbers.length <= 2) return numbers;
+    if (numbers.length <= 4) return numbers.replace(/^(\d{2})(\d)/, '$1 $2');
+    if (numbers.length <= 9) return numbers.replace(/^(\d{2})(\d{0,5})(\d{0,4})/, '$1 $2-$3');
+    return numbers.replace(/^(\d{2})(\d{5})(\d{0,4})/, '$1 $2-$3');
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const numbers = value.replace(/\D/g, '');
+
+    if (numbers.length <= 13) {
+      setPhoneNumber(numbers);
+    }
   };
 
   return (
@@ -94,178 +185,214 @@ const WhatsAppQRCodeSimple: React.FC = () => {
             <Smartphone className="h-8 w-8 text-green-600" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Conectar WhatsApp
+            Conectar WhatsApp Business
           </h2>
           <p className="text-gray-600">
-            Método simplificado - Sem instalar nada
+            Configure seu WhatsApp para receber pedidos e atender clientes
           </p>
         </div>
 
-        {status === 'disconnected' && (
+        {status === 'setup' ? (
           <div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-              <h3 className="font-semibold text-gray-900 mb-4 text-center">
-                📱 Digite o número do WhatsApp Business
-              </h3>
+            <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-6 mb-6">
+              <div className="flex items-start gap-3 mb-4">
+                <MessageCircle className="h-6 w-6 text-green-600 flex-shrink-0 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    Configure seu WhatsApp Business em 30 segundos
+                  </h3>
+                  <p className="text-sm text-gray-700">
+                    Informe os dados do seu WhatsApp Business e comece a receber pedidos automaticamente!
+                  </p>
+                </div>
+              </div>
+            </div>
 
-              <div className="mb-4">
+            <div className="space-y-4 mb-6">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Número com DDD (somente números):
+                  <Phone className="h-4 w-4 inline mr-1" />
+                  Número do WhatsApp Business:
                 </label>
                 <input
                   type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
-                  placeholder="11999999999"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg text-center font-mono"
-                  maxLength={13}
+                  value={formatPhone(phoneNumber)}
+                  onChange={handlePhoneChange}
+                  placeholder="55 11 99999-9999"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg font-mono focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  maxLength={16}
                 />
-                <p className="text-xs text-gray-600 mt-2 text-center">
-                  Exemplo: 11999999999 (DDD + número)
+                <p className="text-xs text-gray-600 mt-2">
+                  Formato: Código país + DDD + número (ex: 5511999999999)
                 </p>
               </div>
 
-              <button
-                onClick={generateQRCode}
-                disabled={!phoneNumber || phoneNumber.length < 10}
-                className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-              >
-                <QrCode className="h-5 w-5" />
-                Gerar Link de Conexão
-              </button>
-            </div>
-
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-sm text-yellow-800">
-                <strong>💡 Como funciona:</strong> Você informa o número do WhatsApp Business
-                que deseja conectar ao sistema. Depois, basta clicar no link gerado no seu celular.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {status === 'waiting' && qrCode && (
-          <div className="text-center">
-            <div className="bg-green-50 border-4 border-green-500 rounded-lg p-6 mb-6">
-              <h3 className="font-semibold text-gray-900 mb-4">
-                ✅ Link Pronto! Abra no seu celular:
-              </h3>
-
-              <div className="bg-white rounded-lg p-4 mb-4">
-                <img
-                  src={qrCode}
-                  alt="QR Code"
-                  className="w-64 h-64 mx-auto mb-4"
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nome do Negócio:
+                </label>
+                <input
+                  type="text"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Ex: Pizzaria do João"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  maxLength={50}
                 />
-
-                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-3">
-                  <input
-                    type="text"
-                    value={`https://wa.me/${phoneNumber}`}
-                    readOnly
-                    className="flex-1 bg-transparent text-sm font-mono"
-                  />
-                  <button
-                    onClick={copyNumber}
-                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                  >
-                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
-                <h4 className="font-semibold text-gray-900 mb-3">
-                  📱 Como conectar:
-                </h4>
-                <ol className="space-y-2 text-sm text-gray-700">
-                  <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">1.</span>
-                    <span>Escaneie o QR Code acima com a câmera do celular</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">2.</span>
-                    <span>Ou clique no botão "Copiar" e abra o link no celular</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">3.</span>
-                    <span>O WhatsApp abrirá automaticamente</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">4.</span>
-                    <span>Envie uma mensagem: "Conectar sistema"</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-bold text-blue-600">5.</span>
-                    <span>Pronto! Sistema conectado ✅</span>
-                  </li>
-                </ol>
+                <p className="text-xs text-gray-600 mt-2">
+                  Como seus clientes conhecem seu negócio
+                </p>
               </div>
             </div>
 
-            <div className="flex gap-3 justify-center">
+            <div className="space-y-3">
               <button
-                onClick={disconnect}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                onClick={connectWhatsApp}
+                disabled={isLoading || !phoneNumber || !businessName}
+                className="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 font-semibold text-lg shadow-lg"
               >
-                Cancelar
+                {isLoading ? (
+                  <>
+                    <Loader className="h-5 w-5 animate-spin" />
+                    Conectando WhatsApp...
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="h-5 w-5" />
+                    Conectar WhatsApp Business
+                  </>
+                )}
               </button>
+
               <button
-                onClick={generateQRCode}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                onClick={testFirebaseConnection}
+                disabled={isLoading}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 transition-colors flex items-center justify-center gap-2 text-sm"
               >
-                <RefreshCw className="h-4 w-4" />
-                Gerar Novo Link
+                <Bug className="h-4 w-4" />
+                Testar Conexão Firebase
               </button>
+            </div>
+
+            <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-semibold text-gray-900 mb-3 text-sm">
+                O que acontece depois de conectar:
+              </h4>
+              <ul className="space-y-2 text-sm text-gray-700">
+                <li className="flex gap-2">
+                  <span className="text-green-600">✓</span>
+                  <span>Clientes podem fazer pedidos pelo WhatsApp</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-600">✓</span>
+                  <span>IA responde automaticamente com cardápio e preços</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-600">✓</span>
+                  <span>Pedidos aparecem automaticamente no sistema</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-600">✓</span>
+                  <span>Envie promoções e atualizações de pedidos</span>
+                </li>
+              </ul>
             </div>
           </div>
-        )}
-
-        {status === 'connected' && (
+        ) : (
           <div className="text-center">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
-              <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-8 mb-6">
+              <CheckCircle className="h-20 w-20 text-green-600 mx-auto mb-4" />
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
                 WhatsApp Conectado!
               </h3>
-              <p className="text-gray-600 mb-4">
-                Número: <span className="font-mono font-bold">{phoneNumber}</span>
+
+              <div className="bg-white rounded-lg p-4 mb-4 inline-block">
+                <p className="text-gray-600 mb-2">Número:</p>
+                <p className="text-xl font-mono font-bold text-green-600">
+                  +{formatPhone(phoneNumber)}
+                </p>
+                <p className="text-gray-600 mt-3 mb-2">Negócio:</p>
+                <p className="text-lg font-bold text-gray-900">
+                  {businessName}
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                <h4 className="font-semibold text-gray-900 mb-3 text-sm">
+                  Seu WhatsApp está pronto para:
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="bg-white rounded-lg p-3">
+                    <MessageCircle className="h-5 w-5 text-green-600 mx-auto mb-1" />
+                    <p className="font-semibold text-gray-900">Receber Pedidos</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <Phone className="h-5 w-5 text-blue-600 mx-auto mb-1" />
+                    <p className="font-semibold text-gray-900">Atendimento IA</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <Smartphone className="h-5 w-5 text-purple-600 mx-auto mb-1" />
+                    <p className="font-semibold text-gray-900">Promoções</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <CheckCircle className="h-5 w-5 text-emerald-600 mx-auto mb-1" />
+                    <p className="font-semibold text-gray-900">Rastreamento</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-700 mb-2">
+                <strong>Próximo passo:</strong>
               </p>
-              <p className="text-gray-600">
-                Agora você pode ir para "Atendimento WhatsApp" e começar a receber mensagens!
+              <p className="text-sm text-gray-600">
+                Vá para <strong>"Atendimento WhatsApp"</strong> para visualizar e responder mensagens dos clientes!
               </p>
             </div>
 
             <button
               onClick={disconnect}
-              className="px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              disabled={isLoading}
+              className="px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:bg-gray-300 mx-auto block"
             >
-              Desconectar
+              {isLoading ? 'Desconectando...' : 'Desconectar WhatsApp'}
             </button>
           </div>
         )}
       </div>
 
-      <div className="mt-6 bg-gray-50 rounded-lg p-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Como funciona:</h3>
-        <ul className="space-y-2 text-sm text-gray-700">
-          <li className="flex gap-2">
+      <div className="mt-6 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-6 border border-gray-200">
+        <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <MessageCircle className="h-5 w-5 text-green-600" />
+          WhatsApp Business API - Recursos:
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
+          <div className="flex gap-2">
             <span className="text-green-600">✓</span>
-            <span><strong>Sem instalar servidor:</strong> Tudo funciona automaticamente</span>
-          </li>
-          <li className="flex gap-2">
+            <span><strong>API Oficial:</strong> Integração oficial do WhatsApp</span>
+          </div>
+          <div className="flex gap-2">
             <span className="text-green-600">✓</span>
-            <span><strong>Sem QR Code complexo:</strong> Use link direto do WhatsApp</span>
-          </li>
-          <li className="flex gap-2">
+            <span><strong>Sem QR Code:</strong> Configuração instantânea</span>
+          </div>
+          <div className="flex gap-2">
             <span className="text-green-600">✓</span>
-            <span><strong>Integração Firebase:</strong> Dados salvos em tempo real</span>
-          </li>
-          <li className="flex gap-2">
+            <span><strong>IA Integrada:</strong> Respostas automáticas inteligentes</span>
+          </div>
+          <div className="flex gap-2">
             <span className="text-green-600">✓</span>
-            <span><strong>Mensagens automáticas:</strong> IA responde instantaneamente</span>
-          </li>
-        </ul>
+            <span><strong>Firebase Realtime:</strong> Mensagens em tempo real</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-green-600">✓</span>
+            <span><strong>Pedidos Automáticos:</strong> Sistema processa sozinho</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-green-600">✓</span>
+            <span><strong>100% Gratuito:</strong> Token já configurado</span>
+          </div>
+        </div>
       </div>
     </div>
   );
