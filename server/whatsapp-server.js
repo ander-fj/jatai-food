@@ -189,21 +189,25 @@ app.post('/api/whatsapp/start/:id', (req, res) => {
 
   client.on('disconnected', (reason) => {
     console.log(`Sessão ${id} foi desconectada. Razão:`, reason);
-    delete sessionQrCodes[id];
+    
     // Limpa as sessões de chat da IA associadas a esta instância do WhatsApp
-    Object.keys(chatSessions).forEach(key => {
-      if (sessions[id]?.info?.wid?.user === key.split('@')[0]) {
-          console.log(`Limpando sessão de chat para ${key}`);
-          delete chatSessions[key];
-      }
-    });
-    // Limpa o mapeamento de chats para a sessão desconectada
     if (sessionChatMappings[id]) {
+      console.log(`Limpando mapeamento de chat para a sessão ${id}.`);
+      sessionChatMappings[id].forEach(chatId => {
+        if (chatSessions[chatId]) {
+          console.log(`Limpando sessão de chat para ${chatId}`);
+          delete chatSessions[chatId];
+        }
+      });
       delete sessionChatMappings[id];
     }
-    client.destroy();
+
+    // Limpa outras referências da sessão
+    delete sessionQrCodes[id];
     delete sessions[id];
     sessionStatus[id] = 'disconnected';
+    
+    console.log(`Limpeza completa para a sessão ${id}.`);
   });
 
   client.initialize();
@@ -220,12 +224,13 @@ app.post('/api/whatsapp/stop/:id', async (req, res) => {
 
   if (client) {
     console.log(`Desconectando sessão ${id}...`);
-    await client.logout(); // O evento 'disconnected' cuidará da limpeza
-    res.status(200).json({ success: true, message: `Sessão ${id} desconectada.` });
+    await client.destroy(); // Usar destroy para forçar a desconexão e acionar o evento 'disconnected'
+    // A resposta é enviada aqui, mas a limpeza real acontece no evento 'disconnected'
+    res.status(200).json({ success: true, message: `Desconexão da sessão ${id} iniciada.` });
   } else {
-    // Se não houver cliente, apenas limpa o status
+    // Se não houver cliente, apenas garante que o status esteja limpo
     sessionStatus[id] = 'disconnected';
-    res.status(404).json({ success: false, error: `Sessão ${id} não encontrada.` });
+    res.status(404).json({ success: false, error: `Sessão ${id} não encontrada ou já desconectada.` });
   }
 });
 

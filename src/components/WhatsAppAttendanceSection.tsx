@@ -17,12 +17,12 @@ interface WhatsAppConfig {
 
 
 interface ConnectionStatus {
-  status: 'DISCONNECTED' | 'INITIALIZING' | 'QR_CODE' | 'AUTHENTICATED' | 'CONNECTED' | 'AUTH_FAILURE' | 'ERROR' | 'SERVER_OFFLINE' | 'NOT_INITIALIZED';
+  status: 'DISCONNECTED' | 'INITIALIZING' | 'QR_CODE' | 'AUTHENTICATED' | 'ready' | 'AUTH_FAILURE' | 'ERROR' | 'SERVER_OFFLINE' | 'NOT_INITIALIZED';
   isConnected: boolean;
   hasQrCode: boolean;
 }
 
-const WHATSAPP_SERVER_URL = process.env.REACT_APP_WHATSAPP_SERVER_URL || 'https://jatai-food-backend.onrender.com';
+const WHATSAPP_SERVER_URL = process.env.REACT_APP_WHATSAPP_SERVER_URL || 'http://localhost:3001';
 
 const WhatsAppAttendanceSection: React.FC = () => {
   const username = localStorage.getItem('username') || 'A';
@@ -53,7 +53,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
   useEffect(() => {
     // Este efeito lida com a lógica de polling (verificação contínua).
-    const finalStates = ['CONNECTED', 'DISCONNECTED', 'AUTH_FAILURE', 'ERROR', 'SERVER_OFFLINE', 'NOT_INITIALIZED'];
+    const finalStates = ['ready', 'DISCONNECTED', 'AUTH_FAILURE', 'ERROR', 'SERVER_OFFLINE', 'NOT_INITIALIZED'];
     if (finalStates.includes(connectionStatus.status!)) {
       return; // Para de verificar se atingiu um estado final.
     }
@@ -142,7 +142,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
         mensagemBoasVindas: dataToSave.welcomeMessage,
       };
 
-      await fetch(`${WHATSAPP_SERVER_URL}/api/config/update`, {
+      await fetch(`${WHATSAPP_SERVER_URL}/api/config/update/${username}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,7 +190,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
       const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/status/${username}`);
       if (response.ok) {
         const data = await response.json(); // Ex: { success: true, status: 'QR_CODE' }
-        setConnectionStatus(prev => ({ ...prev, status: data.status, isConnected: data.status === 'CONNECTED' }));
+        setConnectionStatus(prev => ({ ...prev, status: data.status, isConnected: data.status === 'ready' }));
       }
     } catch (error) {
       console.error('Servidor offline ou inacessível:', error);
@@ -258,7 +258,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
     
     toast.info('Desconectando WhatsApp...');
     try {
-      const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/disconnect/${username}`, {
+      const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/stop/${username}`, {
         method: 'POST'
       });
 
@@ -291,7 +291,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
   const getStatusColor = () => {
     switch (connectionStatus.status) {
-      case 'CONNECTED': return 'green';
+      case 'ready': return 'green';
       case 'AUTHENTICATED': return 'blue';
       case 'QR_CODE': return 'yellow';
       case 'INITIALIZING': return 'yellow';
@@ -304,7 +304,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
   const getStatusText = () => {
     switch (connectionStatus.status) {
-      case 'CONNECTED': return 'Conectado';
+      case 'ready': return 'Conectado';
       case 'AUTHENTICATED': return 'Autenticado';
       case 'QR_CODE': return 'Aguardando leitura do QR Code';
       case 'INITIALIZING': return 'Inicializando...';
