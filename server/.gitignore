@@ -1,0 +1,11 @@
+# Dependencies
+/node_modules
+
+# Environment variables
+.env
+
+# Firebase credentials
+firebase-service-account.json
+
+# WhatsApp-Web.js session data
+.wwebjs_auth/
