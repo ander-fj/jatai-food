@@ -22,7 +22,7 @@ interface ConnectionStatus {
   hasQrCode: boolean;
 }
 
-const WHATSAPP_SERVER_URL = process.env.REACT_APP_WHATSAPP_SERVER_URL || 'http://localhost:3001';
+const WHATSAPP_SERVER_URL = process.env.REACT_APP_WHATSAPP_SERVER_URL || 'https://jatai-food-backend.onrender.com';
 
 const WhatsAppAttendanceSection: React.FC = () => {
   const username = localStorage.getItem('username') || 'A';
