@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Save, RefreshCw, AlertCircle, Phone, Power, QrCode, Wifi, WifiOff, Link, Building, Clock, MessageSquare, MapPin } from 'lucide-react';
+import { MessageCircle, Save, RefreshCw, AlertCircle, Phone, Power, QrCode, Wifi, WifiOff, Link, Building, Clock, MessageSquare, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { ref, set, get } from 'firebase/database';
 import { database } from '../config/firebase';
@@ -35,6 +35,7 @@ const WHATSAPP_SERVER_URL = process.env.REACT_APP_WHATSAPP_SERVER_URL || 'https:
 
 const WhatsAppAttendanceSection: React.FC = () => {
   const username = localStorage.getItem('username');
+  const [isConfigCollapsed, setIsConfigCollapsed] = useState(false);
   const [isConfigLoading, setIsConfigLoading] = useState(true);
   const [config, setConfig] = useState<WhatsAppConfig>(initialConfigState);
   const [isSaving, setIsSaving] = useState(false);
@@ -426,123 +427,134 @@ const WhatsAppAttendanceSection: React.FC = () => {
       </div>
 
       {/* Configuration Form */}
-      <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
-        <h3 className="text-xl font-semibold text-gray-800 mb-4">Configurações</h3>
-
-        {isConfigLoading ? (
-          <p>Carregando configurações...</p>
-        ) : (
-          <>
-            {/* Nome do Restaurante */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <Building className="h-4 w-4" />
-            Nome do Restaurante
-          </label>
-          <input
-            type="text"
-            value={config.restaurantName || ''}
-            onChange={(e) => setConfig({ ...config, restaurantName: e.target.value })}
-            placeholder="Ex: Pizzaria do Zé"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Phone Number */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <Phone className="h-4 w-4" />
-            Número do WhatsApp
-          </label>
-          <input
-            type="text"
-            value={config.phoneNumber || ''}
-            onChange={(e) => setConfig({ ...config, phoneNumber: formatPhoneNumber(e.target.value) })}
-            placeholder="(64) 99999-9999"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Digite o número do WhatsApp que receberá os pedidos
-          </p>
-        </div>
-
-        {/* Horário de Funcionamento */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <Clock className="h-4 w-4" />
-            Horário de Funcionamento
-          </label>
-          <input
-            type="text"
-            value={config.hours || ''}
-            onChange={(e) => setConfig({ ...config, hours: e.target.value })}
-            placeholder="Seg a Sex: 18h às 23h, Sáb e Dom: 18h às 00h"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Endereço */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <MapPin className="h-4 w-4" />
-            Endereço
-          </label>
-          <input
-            type="text"
-            value={config.address || ''}
-            onChange={(e) => setConfig({ ...config, address: e.target.value })}
-            placeholder="Rua das Pizzas, 123, Bairro Saboroso"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Menu URL */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <Link className="h-4 w-4" />
-            Link do Cardápio/Página de Pedidos
-          </label>
-          <input
-            type="url"
-            value={config.menuUrl || ''}
-            onChange={(e) => setConfig({ ...config, menuUrl: e.target.value })}
-            placeholder="https://seu-site.com/pedido"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Este é o link que o agente enviará quando o cliente pedir o cardápio.
-          </p>
-        </div>
-
-        {/* Mensagem de Boas-Vindas */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-            <MessageSquare className="h-4 w-4" />
-            Mensagem de Boas-Vindas
-          </label>
-          <textarea
-            value={config.welcomeMessage || ''}
-            onChange={(e) => setConfig({ ...config, welcomeMessage: e.target.value })}
-            placeholder="Olá! Bem-vindo à {restaurantName}. Como posso ajudar?"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            rows={3}
-          />
-          <p className="text-xs text-gray-500 mt-1">Use {'{restaurantName}'} para inserir o nome do restaurante automaticamente.</p>
-        </div>
-
-          </>
-        )}
-        {/* Action Buttons */}
-        <div className="flex gap-3 pt-4">
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}>
+          <h3 className="text-xl font-semibold text-gray-800">Configurações</h3>
           <button
-            onClick={saveConfig}
-            disabled={isSaving}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 rounded-full hover:bg-gray-100"
+            aria-label={isConfigCollapsed ? 'Expandir configurações' : 'Recolher configurações'}
           >
-            <Save className="h-5 w-5" />
-            {isSaving ? 'Salvando...' : 'Salvar Configurações'}
+            {isConfigCollapsed ? <ChevronDown className="h-5 w-5 text-gray-600" /> : <ChevronUp className="h-5 w-5 text-gray-600" />}
           </button>
         </div>
+
+        {!isConfigCollapsed && (
+          <div className="mt-4 pt-6 border-t border-gray-200 space-y-6">
+            {isConfigLoading ? (
+              <p>Carregando configurações...</p>
+            ) : (
+              <>
+                {/* Nome do Restaurante */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <Building className="h-4 w-4" />
+                    Nome do Restaurante
+                  </label>
+                  <input
+                    type="text"
+                    value={config.restaurantName || ''}
+                    onChange={(e) => setConfig({ ...config, restaurantName: e.target.value })}
+                    placeholder="Ex: Pizzaria do Zé"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Phone Number */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <Phone className="h-4 w-4" />
+                    Número do WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    value={config.phoneNumber || ''}
+                    onChange={(e) => setConfig({ ...config, phoneNumber: formatPhoneNumber(e.target.value) })}
+                    placeholder="(64) 99999-9999"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Digite o número do WhatsApp que receberá os pedidos
+                  </p>
+                </div>
+
+                {/* Horário de Funcionamento */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <Clock className="h-4 w-4" />
+                    Horário de Funcionamento
+                  </label>
+                  <input
+                    type="text"
+                    value={config.hours || ''}
+                    onChange={(e) => setConfig({ ...config, hours: e.target.value })}
+                    placeholder="Seg a Sex: 18h às 23h, Sáb e Dom: 18h às 00h"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Endereço */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <MapPin className="h-4 w-4" />
+                    Endereço
+                  </label>
+                  <input
+                    type="text"
+                    value={config.address || ''}
+                    onChange={(e) => setConfig({ ...config, address: e.target.value })}
+                    placeholder="Rua das Pizzas, 123, Bairro Saboroso"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Menu URL */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <Link className="h-4 w-4" />
+                    Link do Cardápio/Página de Pedidos
+                  </label>
+                  <input
+                    type="url"
+                    value={config.menuUrl || ''}
+                    onChange={(e) => setConfig({ ...config, menuUrl: e.target.value })}
+                    placeholder="https://seu-site.com/pedido"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Este é o link que o agente enviará quando o cliente pedir o cardápio.
+                  </p>
+                </div>
+
+                {/* Mensagem de Boas-Vindas */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Mensagem de Boas-Vindas
+                  </label>
+                  <textarea
+                    value={config.welcomeMessage || ''}
+                    onChange={(e) => setConfig({ ...config, welcomeMessage: e.target.value })}
+                    placeholder="Olá! Bem-vindo à {restaurantName}. Como posso ajudar?"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    rows={3}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Use {'{restaurantName}'} para inserir o nome do restaurante automaticamente.</p>
+                </div>
+              </>
+            )}
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-4">
+              <button
+                onClick={saveConfig}
+                disabled={isSaving}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="h-5 w-5" />
+                {isSaving ? 'Salvando...' : 'Salvar Configurações'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Instructions */}
