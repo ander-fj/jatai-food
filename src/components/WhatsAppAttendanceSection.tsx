@@ -22,21 +22,21 @@ interface ConnectionStatus {
   hasQrCode: boolean;
 }
 
+const initialConfigState: WhatsAppConfig = {
+  isActive: false,
+  restaurantName: '',
+  phoneNumber: '',
+  menuUrl: '',
+  hours: '',
+  address: '',
+  welcomeMessage: '',
+};
 const WHATSAPP_SERVER_URL = process.env.REACT_APP_WHATSAPP_SERVER_URL || 'https://jatai-food-backend.onrender.com';
 
 const WhatsAppAttendanceSection: React.FC = () => {
-  const username = localStorage.getItem('username') || 'A';
-  const [config, setConfig] = useState<WhatsAppConfig>({
-    isActive: false,
-    restaurantName: '',
-    phoneNumber: '',
-    menuUrl: '',
-    hours: '',
-    address: '',
-    welcomeMessage: '',
-
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const username = localStorage.getItem('username');
+  const [isConfigLoading, setIsConfigLoading] = useState(true);
+  const [config, setConfig] = useState<WhatsAppConfig>(initialConfigState);
   const [isSaving, setIsSaving] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<Partial<ConnectionStatus>>({
@@ -47,8 +47,11 @@ const WhatsAppAttendanceSection: React.FC = () => {
   const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
-    loadConfig();
-    checkConnectionStatus();
+    if (username) {
+      loadConfig();
+      checkConnectionStatus();
+
+    }
   }, [username]);
 
   useEffect(() => {
@@ -77,20 +80,34 @@ const WhatsAppAttendanceSection: React.FC = () => {
   const loadConfig = async () => {
     if (!username) return;
     
-    setIsLoading(true);
+    setIsConfigLoading(true);
     try {
       const configRef = ref(database, `tenants/${username}/whatsappConfig`);
       const snapshot = await get(configRef);
       
       if (snapshot.exists()) {
         const data = snapshot.val();
-        setConfig(data);
+        // Mapeia os dados do Firebase para o formato do estado local
+        const mappedData: WhatsAppConfig = {
+          isActive: data.isActive || false,
+          restaurantName: data.nome || data.restaurantName || '',
+          phoneNumber: data.whatsapp || data.phoneNumber || '',
+          menuUrl: data.cardapioLink || data.menuUrl || '',
+          hours: data.horario || data.hours || '',
+          address: data.endereco || data.address || '',
+          welcomeMessage: data.mensagemBoasVindas || data.welcomeMessage || '',
+        };
+        // Garante que todos os campos do estado inicial existam,
+        // mesclando com os dados carregados do Firebase.
+        setConfig(prevConfig => ({ ...initialConfigState, ...mappedData }));
+      } else {
+        setConfig(initialConfigState); // Reseta para o estado inicial se não houver dados
       }
     } catch (error) {
       console.error('Erro ao carregar configuração:', error);
       toast.error('Erro ao carregar configurações do WhatsApp');
     } finally {
-      setIsLoading(false);
+      setIsConfigLoading(false);
     }
   };
 
@@ -101,13 +118,6 @@ const WhatsAppAttendanceSection: React.FC = () => {
     
     if (!username) {
       console.log('❌ Username não encontrado!');
-      return;
-    }
-    
-    // Validações
-    if (!config.phoneNumber && !config.hours && !config.address) {
-      console.log('❌ Número do WhatsApp não preenchido');
-      toast.error('Por favor, insira o número do WhatsApp');
       return;
     }
     
@@ -418,8 +428,12 @@ const WhatsAppAttendanceSection: React.FC = () => {
       {/* Configuration Form */}
       <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
         <h3 className="text-xl font-semibold text-gray-800 mb-4">Configurações</h3>
-        
-        {/* Nome do Restaurante */}
+
+        {isConfigLoading ? (
+          <p>Carregando configurações...</p>
+        ) : (
+          <>
+            {/* Nome do Restaurante */}
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
             <Building className="h-4 w-4" />
@@ -516,8 +530,8 @@ const WhatsAppAttendanceSection: React.FC = () => {
           <p className="text-xs text-gray-500 mt-1">Use {'{restaurantName}'} para inserir o nome do restaurante automaticamente.</p>
         </div>
 
-
-
+          </>
+        )}
         {/* Action Buttons */}
         <div className="flex gap-3 pt-4">
           <button
