@@ -65,12 +65,12 @@ const CustomerOrderPage: React.FC = () => {
   const [meiaPizzaFirstFlavor, setMeiaPizzaFirstFlavor] = useState<string | null>(null);
   const [isPizzasEspeciaisCollapsed, setIsPizzasEspeciaisCollapsed] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState({
-    salgadas: false,
-    especiais: false,
-    doces: false,
-    lanches: false,
-    refeicoes: false,
-    bebidas: false
+    salgadas: true,
+    especiais: true,
+    doces: true,
+    lanches: true,
+    refeicoes: true,
+    bebidas: true
   });
   const [showCart, setShowCart] = useState(false);
 

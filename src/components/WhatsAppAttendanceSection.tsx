@@ -57,7 +57,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
   useEffect(() => {
     // Este efeito lida com a lógica de polling (verificação contínua).
-    const finalStates = ['ready', 'DISCONNECTED', 'AUTH_FAILURE', 'ERROR', 'SERVER_OFFLINE', 'NOT_INITIALIZED'];
+    const finalStates = ['ready', 'DISCONNECTED', 'AUTH_FAILURE', 'ERROR', 'SERVER_OFFLINE'];
     if (finalStates.includes(connectionStatus.status!)) {
       return; // Para de verificar se atingiu um estado final.
     }

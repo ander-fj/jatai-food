@@ -1,12 +1,24 @@
 const express = require('express');
 const cors = require('cors');
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcodeTerminal = require('qrcode-terminal');
 const qrcode = require('qrcode');
 require('dotenv').config();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { initializeApp } = require('firebase/app');
-const { getDatabase, ref, get } = require('firebase/database');
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getDatabase, ref } = require('firebase/database');
+const fs = require('fs-extra');
+const path = require('path');
+
+// --- CONFIGURAÇÃO INICIAL ---
+
+let serviceAccount;
+try {
+  serviceAccount = require('./firebase-service-account.json'); 
+} catch (error) {
+    console.error("\n[ERRO CRÍTICO] O arquivo 'firebase-service-account.json' não foi encontrado na pasta 'server'.");
+    console.error("Este arquivo é essencial para a comunicação com o Firebase. Baixe-o no console do Firebase e coloque-o na pasta 'server'.\n");
+    process.exit(1);
+}
 
 if (!process.env.GEMINI_API_KEY) {
   console.error("\n[ERRO CRÍTICO] A variável de ambiente 'GEMINI_API_KEY' não foi encontrada.");
@@ -15,19 +27,11 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 // --- CONFIGURAÇÃO DO FIREBASE ---
-const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  databaseURL: process.env.FIREBASE_DATABASE_URL,
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.FIREBASE_APP_ID,
-};
-
-// Inicializa o Firebase
-const firebaseApp = initializeApp(firebaseConfig);
-const database = getDatabase(firebaseApp);
+initializeApp({
+  credential: cert(serviceAccount),
+  databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`
+});
+const database = getDatabase();
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -37,252 +41,286 @@ app.use(cors());
 // Middleware para interpretar o corpo das requisições como JSON
 app.use(express.json());
 
-// Armazena as sessões dos clientes. A chave é o 'id' da sessão.
-const sessions = {};
-const sessionChatMappings = {}; // Mapeia qual cliente (id) está associado a quais conversas de chat (chatId)
-// Armazena o status de cada sessão para ser consultado pela API.
-const sessionStatus = {};
-// Armazena os QR codes de cada sessão.
-const sessionQrCodes = {};
-// Armazena as sessões de chat da IA para manter o histórico.
-let chatSessions = {};
+/**
+ * Encapsula a lógica de um cliente WhatsApp, incluindo estado e eventos.
+ */
+class WhatsAppClient {
+  constructor(sessionId) {
+    this.id = sessionId;
+    this.client = null;
+    this.status = 'NOT_INITIALIZED'; // NOT_INITIALIZED, INITIALIZING, QR_CODE, READY, AUTH_FAILURE, DISCONNECTED
+    this.isReady = false;
+    this.isInitializing = false;
+    this.qrCode = null;
+    this.chatSessions = {}; // Armazena sessões de chat da IA para esta instância
 
-app.get('/', (req, res) => {
-  res.send('Olá! Este é o servidor para o bot do WhatsApp.');
-});
+    this.initializeClient();
+  }
 
-// Rota para verificar o status da conexão
-app.get('/api/whatsapp/status/:id', (req, res) => {
-  const { id } = req.params;
-  const status = sessionStatus[id] || 'disconnected';
-  // A linha abaixo foi comentada para evitar o excesso de logs no console.
-  // console.log(`Verificando status para a sessão ${id}: ${status}`);
-  res.json({ status: status, message: `Sessão ${id} está ${status}.` });
-});
-
-// Rota para obter o QR code
-app.get('/api/whatsapp/qr/:id', (req, res) => {
-  const { id } = req.params;
-  const qr = sessionQrCodes[id];
-  if (qr) {
-    qrcode.toDataURL(qr, (err, url) => {
-      if (err) {
-        res.status(500).json({ error: 'Erro ao gerar QR code.' });
-      } else {
-        res.json({ qr: url });
+  /**
+   * Configura o cliente e seus listeners de evento.
+   * Os listeners são definidos apenas uma vez para evitar duplicatas.
+   */
+  initializeClient() {
+    console.log(`[Sessão ${this.id}] ⚙️  Configurando novo cliente com LocalAuth.`);
+    this.client = new Client({
+      authStrategy: new LocalAuth({ clientId: this.id }),
+      puppeteer: {
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
       }
     });
-  } else {
-    res.status(404).json({ error: 'QR code não encontrado.' });
+
+    // --- LISTENERS DE EVENTO ---
+
+    this.client.on('qr', (qr) => {
+      if (this.isReady) {
+        console.log(`[Sessão ${this.id}] ⚠️  Evento 'qr' recebido, mas a sessão já está 'pronta'. Ignorando.`);
+        return;
+      }
+      console.log(`[Sessão ${this.id}] 📱  QR Code gerado. Aguardando leitura...`);
+      this.status = 'QR_CODE';
+      this.qrCode = qr;
+    });
+
+    this.client.on('ready', () => {
+      console.log(`[Sessão ${this.id}] ✅  Cliente conectado e pronto!`);
+      this.status = 'ready';
+      this.isReady = true;
+      this.qrCode = null;
+    });
+
+    this.client.on('authenticated', () => {
+      console.log(`[Sessão ${this.id}] ✅  Autenticado com sucesso!`);
+      this.status = 'AUTHENTICATED';
+    });
+
+    this.client.on('auth_failure', (msg) => {
+      console.error(`[Sessão ${this.id}] ❌  Falha na autenticação: ${msg}`);
+      this.status = 'AUTH_FAILURE';
+      this.cleanup(true);
+    });
+
+    this.client.on('disconnected', (reason) => {
+      console.log(`[Sessão ${this.id}] ❌  Cliente desconectado. Razão: ${reason}`);
+      this.status = 'DISCONNECTED';
+      this.isReady = false;
+      
+      if (reason === 'LOGOUT') {
+        console.log(`[Sessão ${this.id}] 🔴  LOGOUT detectado - limpeza completa necessária.`);
+        this.cleanup(true);
+      }
+    });
+
+    this.client.on('message', (message) => this.handleMessage(message));
   }
-});
 
-// Rota para iniciar a conexão do WhatsApp
-app.post('/api/whatsapp/start/:id', (req, res) => {
-  const { id } = req.params;
-
-  if (sessions[id] && sessionStatus[id] === 'ready') {
-    return res.status(200).json({ success: true, message: `Sessão ${id} já está conectada.` });
-  }
-
-  console.log(`Iniciando conexão para a sessão: ${id}`);
-  sessionStatus[id] = 'INITIALIZING';
-
-  const client = new Client({
-    authStrategy: new LocalAuth({ clientId: id }),
-    puppeteer: {
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    }
-  });
-
-  client.on('qr', (qr) => {
-    console.log(`QR Code para a sessão ${id}:`);
-    qrcodeTerminal.generate(qr, { small: true });
-    sessionStatus[id] = 'QR_CODE';
-    sessionQrCodes[id] = qr;
-  });
-
-  client.on('ready', () => {
-    console.log(`Sessão ${id} conectada com sucesso!`);
-    sessionStatus[id] = 'ready';
-    // Limpa o QR code após a conexão
-    delete sessionQrCodes[id];
-  });
-  
-  // Inicializa o mapeamento de chats para esta sessão
-  if (!sessionChatMappings[id]) {
-    sessionChatMappings[id] = new Set();
-  }
-
-  client.on('message', async (message) => {
-    // Ignora as próprias mensagens para evitar loops
-    if (message.fromMe) {
+  /**
+   * Inicia a conexão com o WhatsApp.
+   */
+  async initialize() {
+    if (this.isInitializing || this.isReady) {
+      console.log(`[Sessão ${this.id}] ⚠️  Tentativa de inicialização ignorada (Já inicializando ou pronto). Status: ${this.status}`);
       return;
     }
 
-    console.log(`Mensagem recebida de ${message.from}: "${message.body}"`);
+    console.log(`[Sessão ${this.id}] 🔔  Iniciando initialize()...`);
+    this.isInitializing = true;
+    this.status = 'INITIALIZING';
 
     try {
-      const chatId = message.from;
+      await this.client.initialize();
+    } catch (error) {
+      console.error(`[Sessão ${this.id}] 💥  Erro durante a inicialização do cliente:`, error);
+      this.status = 'ERROR';
+    } finally {
+      this.isInitializing = false;
+      console.log(`[Sessão ${this.id}] ✨  Processo de initialize() finalizado.`);
+    }
+  }
 
-      // Adiciona o ID do chat ao mapeamento da sessão do cliente
-      sessionChatMappings[id].add(chatId);
+  /**
+   * Lida com mensagens recebidas.
+   */
+  async handleMessage(message) {
+    if (message.fromMe) return;
 
-      let restaurantData = {};
-      try {
-        const configRef = ref(database, `tenants/${id}/whatsappConfig`);
-        const snapshot = await get(configRef);
-        if (snapshot.exists()) {
-          restaurantData = snapshot.val();
-        }
-      } catch (dbError) {
-        console.error("Erro ao buscar configuração do Firebase para o assistente:", dbError);
-      }
+    console.log(`[Sessão ${this.id}] 📩  Mensagem de ${message.from}: "${message.body}"`);
 
-      // VERIFICA SE O ASSISTENTE ESTÁ ATIVO
+    try {
+      const configRef = ref(database, `tenants/${this.id}/whatsappConfig`);
+      const snapshot = await get(configRef);
+      const restaurantData = snapshot.exists() ? snapshot.val() : {};
+
       if (!restaurantData.isActive) {
-        console.log(`Assistente desativado para o tenant ${id}. Ignorando mensagem.`);
-        return; // Para a execução aqui se o assistente estiver inativo
+        console.log(`[Sessão ${this.id}] Assistente desativado. Ignorando.`);
+        return;
       }
 
-      // Inicia uma nova sessão de chat se não existir uma para este usuário
-      if (!chatSessions[chatId]) {
-        console.log(`Iniciando nova sessão de chat para ${chatId}`);
-
-        if (Object.keys(restaurantData).length > 0) {
-          console.log(`Configuração do restaurante "${restaurantData.restaurantName}" carregada do Firebase para o assistente.`);
-        } else {
-          console.log(`Nenhuma configuração encontrada no Firebase para o tenant ${id}. Usando instruções genéricas.`);
-        }
-
-        // A instrução do sistema é definida apenas uma vez, quando a conversa começa.
-        const systemInstruction = `
-          Você é o assistente virtual do restaurante ${restaurantData.restaurantName || 'do nosso restaurante'}! Seu nome é Jataí.
-          Sua personalidade é super divertida, animada e simpática! Use emojis para deixar a conversa mais legal. 🥳🍕✨
-          Sua mensagem de boas-vindas é: "${restaurantData.welcomeMessage || 'Olá! Como posso te ajudar?'}"
-          Sua missão é ajudar os clientes com um sorriso no rosto (virtual, claro!). Use as informações abaixo para responder:
-          - Horário de funcionamento: ${restaurantData.hours || 'Não informado'}
-          - Endereço (se perguntarem onde fica): ${restaurantData.address || 'Não informado'}
-          - Link do Cardápio e Pedidos: ${restaurantData.menuUrl || 'Não informado'}
-          - Telefone de contato: ${restaurantData.phoneNumber || 'Não informado'}
-          IMPORTANTE: Ao enviar o link do cardápio, envie apenas a URL, sem formatação de link ou markdown. Por exemplo: https://seusite.com/cardapio
-          NUNCA invente informações. Se não souber algo, diga algo como: "Opa, essa pergunta me pegou! Vou chamar um humano pra te ajudar, só um minutinho! 🧑‍🍳"
-        `;
-
+      const chatId = message.from;
+      if (!this.chatSessions[chatId]) {
+        console.log(`[Sessão ${this.id}] Iniciando nova sessão de IA para ${chatId}`);
+        const systemInstruction = this.createSystemInstruction(restaurantData);
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", systemInstruction });
-        chatSessions[chatId] = model.startChat({
-          history: [], // Começa com histórico vazio
-        });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction });
+        this.chatSessions[chatId] = model.startChat({ history: [] });
       }
 
-      const chat = chatSessions[chatId];
+      const chat = this.chatSessions[chatId];
       const result = await chat.sendMessage(message.body);
-      const response = await result.response;
-      const text = response.text();
+      const text = result.response.text();
       await message.reply(text);
+
     } catch (e) {
-      console.error('Erro ao gerar resposta da IA:', e);
-      await message.reply('Desculpe, não consegui processar sua solicitação no momento.');
+      console.error(`[Sessão ${this.id}] ❗️ Erro ao processar mensagem com IA:`, e);
+      await message.reply('🤖 Oops! Tive um probleminha para processar sua mensagem. Tente novamente em um instante.');
     }
-  });
-
-  client.on('disconnected', (reason) => {
-    console.log(`Sessão ${id} foi desconectada. Razão:`, reason);
-    
-    // Limpa as sessões de chat da IA associadas a esta instância do WhatsApp
-    if (sessionChatMappings[id]) {
-      console.log(`Limpando mapeamento de chat para a sessão ${id}.`);
-      sessionChatMappings[id].forEach(chatId => {
-        if (chatSessions[chatId]) {
-          console.log(`Limpando sessão de chat para ${chatId}`);
-          delete chatSessions[chatId];
-        }
-      });
-      delete sessionChatMappings[id];
-    }
-
-    // Limpa outras referências da sessão
-    delete sessionQrCodes[id];
-    delete sessions[id];
-    sessionStatus[id] = 'disconnected';
-    
-    console.log(`Limpeza completa para a sessão ${id}.`);
-  });
-
-  client.initialize();
-  sessions[id] = client;
-
-  // Responde imediatamente para o frontend não ficar esperando
-  res.status(202).json({ success: true, message: `Inicialização da sessão ${id} iniciada. Escaneie o QR Code.` });
-});
-
-// Rota para parar a conexão do WhatsApp
-app.post('/api/whatsapp/stop/:id', async (req, res) => {
-  const { id } = req.params;
-  const client = sessions[id];
-
-  if (client) {
-    console.log(`Desconectando sessão ${id}...`);
-    await client.destroy(); // Usar destroy para forçar a desconexão e acionar o evento 'disconnected'
-    // A resposta é enviada aqui, mas a limpeza real acontece no evento 'disconnected'
-    res.status(200).json({ success: true, message: `Desconexão da sessão ${id} iniciada.` });
-  } else {
-    // Se não houver cliente, apenas garante que o status esteja limpo
-    sessionStatus[id] = 'disconnected';
-    res.status(404).json({ success: false, error: `Sessão ${id} não encontrada ou já desconectada.` });
-  }
-});
-
-// Rota para enviar mensagem
-app.post('/api/whatsapp/send-message/:id', async (req, res) => {
-  const { id } = req.params;
-  const { number, message } = req.body; // Pega o número e a mensagem do corpo da requisição
-
-  if (!number || !message) {
-    return res.status(400).json({ success: false, error: 'Número e mensagem são obrigatórios.' });
   }
 
-  const client = sessions[id];
-
-  if (!client || sessionStatus[id] !== 'ready') {
-    return res.status(404).json({ success: false, error: `Sessão ${id} não está conectada ou não foi encontrada.` });
+  createSystemInstruction(data) {
+    return `
+      Você é o assistente virtual do restaurante ${data.restaurantName || 'do nosso restaurante'}! Seu nome é Jataí.
+      Sua personalidade é super divertida, animada e simpática! Use emojis para deixar a conversa mais legal. 🥳🍕✨
+      Sua mensagem de boas-vindas é: "${data.welcomeMessage || 'Olá! Como posso te ajudar?'}"
+      Sua missão é ajudar os clientes com um sorriso no rosto (virtual, claro!). Use as informações abaixo para responder:
+      - Horário de funcionamento: ${data.hours || 'Não informado'}
+      - Endereço (se perguntarem onde fica): ${data.address || 'Não informado'}
+      - Link do Cardápio e Pedidos: ${data.menuUrl || 'Não informado'}
+      - Telefone de contato: ${data.phoneNumber || 'Não informado'}
+      IMPORTANTE: Ao enviar o link do cardápio, envie apenas a URL, sem formatação de link ou markdown. Por exemplo: https://seusite.com/cardapio
+      NUNCA invente informações. Se não souber algo, diga algo como: "Opa, essa pergunta me pegou! Vou chamar um humano pra te ajudar, só um minutinho! 🧑‍🍳"
+    `;
   }
 
-  try {
-    // Formata o número para o padrão do WhatsApp (código do país + ddd + número + @c.us)
-    const chatId = `${number}@c.us`;
-    await client.sendMessage(chatId, message);
-    console.log(`Mensagem enviada para ${number} na sessão ${id}`);
-    res.status(200).json({ success: true, message: `Mensagem enviada para ${number}` });
-  } catch (error) {
-    console.error(`Erro ao enviar mensagem na sessão ${id}:`, error);
-    res.status(500).json({ success: false, error: 'Erro ao enviar mensagem.', details: error.message });
-  }
-});
-
-// Rota para atualizar a configuração do restaurante
-app.post('/api/config/update/:id', (req, res) => {
-  const { id } = req.params; // O 'id' da sessão/tenant
-  const newData = req.body;
-
-  if (!newData || Object.keys(newData).length === 0) {
-    return res.status(400).json({ success: false, error: 'Nenhum dado fornecido para atualização.' });
+  /**
+   * Limpa as sessões de IA para forçar a recriação com novas instruções.
+   */
+  resetIaSession() {
+      console.log(`[Sessão ${this.id}] 🧠 Reiniciando todas as sessões de IA devido à atualização de configuração.`);
+      this.chatSessions = {};
   }
 
-  // Limpa as sessões de chat da IA que pertencem a este tenant para forçar a recriação com as novas instruções
-  if (sessionChatMappings[id]) {
-    sessionChatMappings[id].forEach(chatId => {
-      if (chatSessions[chatId]) {
-        delete chatSessions[chatId];
+  /**
+   * Desconecta o cliente e limpa os recursos.
+   * @param {boolean} force - Se true, remove a pasta de sessão do disco.
+   */
+  async cleanup(force = false) {
+    console.log(`[Sessão ${this.id}] 🧹  Limpando sessão... (Remover Auth: ${force})`);
+    if (this.client) {
+      try {
+        await this.client.destroy();
+      } catch (e) {
+        console.error(`[Sessão ${this.id}] ❗️ Erro ao destruir cliente:`, e.message);
       }
-    });
+    }
+    this.client = null;
+    this.isReady = false;
+    this.status = 'DISCONNECTED';
+    this.chatSessions = {}; // Limpa sessões de IA
+
+    if (force) {
+      const sessionPath = path.join(__dirname, '.wwebjs_auth', `session-${this.id}`);
+      try {
+        await fs.remove(sessionPath);
+        console.log(`[Sessão ${this.id}] 🗑️  Pasta da sessão ${sessionPath} removida FORÇADAMENTE.`);
+      } catch (e) {
+        console.error(`[Sessão ${this.id}] ❗️ Erro ao remover pasta da sessão:`, e.message);
+      }
+    }
+  }
+}
+
+/**
+ * Gerencia todas as instâncias de clientes WhatsApp ativas.
+ */
+class SessionManager {
+  constructor() {
+    this.sessions = new Map();
   }
 
-  console.log(`[Sessão ${id}] Configurações do assistente atualizadas com sucesso! As sessões de IA foram reiniciadas.`);
-  res.status(200).json({ success: true, message: 'Configurações atualizadas e sessões de IA reiniciadas.' });
+  getSession(sessionId) {
+    if (!this.sessions.has(sessionId)) {
+      console.log(`[Gerenciador] 🏭  Criando nova instância de cliente para a sessão ${sessionId}.`);
+      const newClient = new WhatsAppClient(sessionId);
+      this.sessions.set(sessionId, newClient);
+    }
+    return this.sessions.get(sessionId);
+  }
+
+  removeSession(sessionId) {
+    if (this.sessions.has(sessionId)) {
+      this.sessions.delete(sessionId);
+      console.log(`[Gerenciador] 🛑  Sessão ${sessionId} removida do gerenciador.`);
+    }
+  }
+}
+
+const sessionManager = new SessionManager();
+
+// --- ROTAS DA API ---
+
+app.post('/api/whatsapp/start/:username', async (req, res) => {
+  const sessionId = req.params.username;
+  console.log(`[API] 📥  Recebida requisição para iniciar a sessão ${sessionId}.`);
+  
+  const session = sessionManager.getSession(sessionId);
+  session.initialize();
+
+  res.status(200).json({ success: true, message: 'Inicialização solicitada.' });
+});
+
+app.post('/api/whatsapp/stop/:username', async (req, res) => {
+  const sessionId = req.params.username;
+  console.log(`[API] 📥  Recebida requisição para parar a sessão ${sessionId}.`);
+  
+  const session = sessionManager.getSession(sessionId);
+  if (session) {
+    await session.cleanup(true);
+    sessionManager.removeSession(sessionId);
+  }
+
+  res.status(200).json({ success: true, message: 'Sessão parada e limpa.' });
+});
+
+app.get('/api/whatsapp/status/:username', (req, res) => {
+  const sessionId = req.params.username;
+  const session = sessionManager.getSession(sessionId);
+  
+  res.status(200).json({
+    success: true,
+    status: session.status,
+    isReady: session.isReady,
+  });
+});
+
+app.get('/api/whatsapp/qr/:username', async (req, res) => {
+  const sessionId = req.params.username;
+  const session = sessionManager.getSession(sessionId);
+
+  if (session && session.status === 'QR_CODE' && session.qrCode) {
+    try {
+      const qrImage = await qrcode.toDataURL(session.qrCode);
+      res.status(200).json({ success: true, qr: qrImage });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Erro ao gerar imagem do QR Code.' });
+    }
+  } else {
+    res.status(404).json({ success: false, message: 'QR Code não disponível.' });
+  }
+});
+
+app.post('/api/config/update/:username', (req, res) => {
+    const { username } = req.params;
+    const session = sessionManager.getSession(username);
+
+    if (session) {
+        session.resetIaSession();
+    }
+
+    console.log(`[Sessão ${username}] ⚙️  Configurações atualizadas.`);
+    res.status(200).json({ success: true, message: 'Configurações atualizadas e sessões de IA reiniciadas.' });
 });
 
 app.listen(port, () => {
-  console.log(`Servidor rodando em http://localhost:${port}`);
+  console.log(`🚀 Servidor WhatsApp rodando na porta ${port}`);
 });
