@@ -349,16 +349,15 @@ const attachLifecycleListeners = (client, sessionId) => {
     } catch (err) {
       console.error(`[Sessão ${sessionId}] Erro ao processar mensagem:`, err.message);
 
-      if (isPuppeteerError(err)) {
-        console.error(`[Sessão ${sessionId}] ❌ Erro crítico do Puppeteer detectado`);
-        return;
-      }
-
-      if (await isClientValid(sessionId)) {
+      // Envia uma mensagem de erro genérica para o usuário final,
+      // independentemente do tipo de erro (API, Puppeteer, etc),
+      // desde que o cliente ainda esteja conectado.
+      const isGoogleAIError = String(err).includes('GoogleGenerativeAI');
+      if (await isClientValid(sessionId) && isGoogleAIError) {
         try {
-          await message.reply('Desculpe, tive um problema ao processar sua mensagem.');
+          await message.reply('🤖 Desculpe, estou com um problema para me conectar à minha inteligência. Tente novamente em alguns instantes.');
         } catch (replyErr) {
-          console.error(`[Sessão ${sessionId}] Erro ao enviar mensagem de erro:`, replyErr.message);
+          console.error(`[Sessão ${sessionId}] Falha ao enviar a mensagem de erro para o usuário:`, replyErr.message);
         }
       }
     } finally {
