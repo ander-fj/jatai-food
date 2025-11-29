@@ -12,7 +12,7 @@ async function testModels() {
     "gemini-1.5-pro-002",
     "gemini-1.5-pro-latest",
     "gemini-pro",
-    "gemini-2.0-flash-exp"
+    "gemini-2.5-flash-exp"
   ];
 
   console.log('🔍 Testando modelos disponíveis...\n');
