@@ -377,13 +377,13 @@ const attachLifecycleListeners = (client, sessionId) => {
       return;
     }
 
+    await set(sessionRef, { status: 'disconnected' }); // Garante a atualização imediata do status
     await cleanupSession(sessionId, false);
-    await set(sessionRef, { status: 'disconnected' });
 
     // Tentar reconectar com delay maior
     const attempts = sessions[sessionId]?.reconnectAttempts || 0;
     if (attempts < MAX_RECONNECTION_ATTEMPTS) {
-      const delay = RECONNECTION_DELAY * (attempts + 1);
+      const delay = RECONNECTION_DELAY * Math.pow(2, attempts); // Backoff exponencial
       console.log(`[Sessão ${sessionId}] Tentando reconectar em ${delay/1000}s (${attempts + 1}/${MAX_RECONNECTION_ATTEMPTS})...`);
       
       reconnectionTimers[sessionId] = setTimeout(() => {
