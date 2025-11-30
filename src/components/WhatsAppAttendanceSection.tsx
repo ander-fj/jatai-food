@@ -193,15 +193,29 @@ const WhatsAppAttendanceSection: React.FC = () => {
 
     // Salva apenas a alteração do 'isActive' no Firebase
     try {
+      // 1. Salva a alteração no Firebase
       const activeRef = ref(database, `tenants/${username}/whatsappConfig/isActive`);
       await set(activeRef, isActive);
+
+      // 2. Notifica o backend em tempo real sobre a mudança de status
+      // Mapeia os nomes dos campos para o formato esperado pelo backend
+      const dataForBackend = {
+        nome: newConfig.restaurantName,
+        whatsapp: newConfig.phoneNumber,
+        horario: newConfig.hours,
+        endereco: newConfig.address,
+        cardapioLink: newConfig.menuUrl,
+        isActive: newConfig.isActive,
+        mensagemBoasVindas: newConfig.welcomeMessage,
+      };
+
+      await fetch(`${WHATSAPP_SERVER_URL}/api/config/update/${username}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dataForBackend),
+      });
+
       toast.success(`Atendimento ${isActive ? 'ativado' : 'desativado'}!`);
-      console.log(`✅ Status do atendimento alterado para: ${isActive}`);
-    } catch (error) {
-      console.error('❌ Erro ao atualizar status de atendimento:', error);
-      toast.error('Erro ao alterar status do atendimento.');
-      // Reverte a alteração visual em caso de erro
-      setConfig({ ...config, isActive: !isActive });
     }
   };
 
