@@ -160,6 +160,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
         horario: dataToSave.hours,
         endereco: dataToSave.address,
         cardapioLink: dataToSave.menuUrl,
+        isActive: dataToSave.isActive, // Adicionado para notificar o backend sobre o status
         mensagemBoasVindas: dataToSave.welcomeMessage,
       };
 
