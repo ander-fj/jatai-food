@@ -60,6 +60,9 @@ const OrderHistoryPage: React.FC = () => {
       console.log('🔄 Repetindo pedido:', order);
       console.log('📋 Itens do pedido original:', order.items);
       
+      // Calcular o subtotal e total com base nos itens do pedido original
+      const subtotal = order.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
+
       const newOrderData = {
         customerName: order.customerName,
         phone: order.phone || '',
@@ -75,7 +78,9 @@ const OrderHistoryPage: React.FC = () => {
             id: b.name, // Simplificação
             size: b.size,
             quantity: b.quantity
-        }))
+        })),
+        subtotal: subtotal,
+        total: order.total // Usar o total original como base, a função addOrder recalculará se necessário
       };
 
       const createdOrder = await addOrder(newOrderData as any);
@@ -92,7 +97,7 @@ const OrderHistoryPage: React.FC = () => {
             `📞 Telefone: ${order.phone}\n` +
             `📍 Endereço: ${order.address}\n\n` +
             `📋 Itens:\n${itemsList}\n\n` +
-            `💰 Total: R$ ${formatCurrency(newOrderData.total)}\n\n` +
+            `💰 Total: R$ ${formatCurrency(createdOrder.total)}\n\n` +
             `O pedido foi criado com TODOS os dados originais preservados!`);
 
       if (sendWhatsApp && order.phone) {
