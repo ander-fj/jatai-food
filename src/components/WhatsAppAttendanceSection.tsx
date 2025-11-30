@@ -17,7 +17,7 @@ interface WhatsAppConfig {
 
 
 interface ConnectionStatus {
-  status: 'DISCONNECTED' | 'INITIALIZING' | 'QR_CODE' | 'AUTHENTICATED' | 'ready' | 'AUTH_FAILURE' | 'ERROR' | 'SERVER_OFFLINE' | 'NOT_INITIALIZED';
+  status: 'DISCONNECTED' | 'INITIALIZING' | 'QR_CODE' | 'qr' | 'AUTHENTICATED' | 'ready' | 'AUTH_FAILURE' | 'ERROR' | 'SERVER_OFFLINE' | 'NOT_INITIALIZED';
   isConnected: boolean;
   hasQrCode: boolean;
 }
@@ -71,7 +71,8 @@ const WhatsAppAttendanceSection: React.FC = () => {
       console.log(`Polling... Status atual: ${connectionStatus.status}`);
       await checkConnectionStatus();
 
-      if (connectionStatus.status === 'QR_CODE') {
+      // CORREÇÃO: Verificar ambos os status 'qr' e 'QR_CODE'
+      if (connectionStatus.status === 'qr' || connectionStatus.status === 'QR_CODE') {
         await fetchQrCode();
       }
 
@@ -209,8 +210,17 @@ const WhatsAppAttendanceSection: React.FC = () => {
     try {
       const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/status/${username}`);
       if (response.ok) {
-        const data = await response.json(); // Ex: { success: true, status: 'QR_CODE' }
-        setConnectionStatus(prev => ({ ...prev, status: data.status, isConnected: data.status === 'ready' }));
+        const data = await response.json(); // Ex: { success: true, status: 'qr' }
+        // CORREÇÃO: Normalizar o status para garantir consistência
+        let normalizedStatus = data.status;
+        if (normalizedStatus === 'qr') {
+          normalizedStatus = 'QR_CODE';
+        }
+        setConnectionStatus(prev => ({ 
+          ...prev, 
+          status: normalizedStatus as any, 
+          isConnected: normalizedStatus === 'ready' 
+        }));
       }
     } catch (error) {
       console.error('Servidor offline ou inacessível:', error);
@@ -227,21 +237,27 @@ const WhatsAppAttendanceSection: React.FC = () => {
     if (!username) return;
 
     try {
-      const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/qr/${username}`); // URL corrigida
+      // CORREÇÃO: URL corrigida para usar username como sessionId
+      const response = await fetch(`${WHATSAPP_SERVER_URL}/api/whatsapp/qr/${username}`);
       // Se a resposta for 404, significa que o QR code ainda não está pronto.
       // Isso é esperado durante o polling, então não tratamos como um erro.
       if (response.status === 404) {
+        console.warn('QR code não encontrado ainda');
         setQrCode(null); // Garante que o QR code antigo seja limpo se ele expirar.
         return;
       }
       if (response.ok) {
         const data = await response.json();
+        console.log('QR Code recebido:', data);
         if (data.qr) {
           setQrCode(data.qr);
           setConnectionStatus(prev => ({ ...prev, status: 'QR_CODE' }));
         } else {
+          console.warn('QR code vazio na resposta');
           setQrCode(null);
         }
+      } else {
+        console.error('Erro na resposta:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Erro ao buscar QR code:', error);
@@ -292,11 +308,11 @@ const WhatsAppAttendanceSection: React.FC = () => {
       }
     } catch (error) {
       console.error('Erro ao desconectar WhatsApp:', error);
-      toast.error('Não foi possível conectar ao servidor para desconectar.');
+      toast.error('Erro ao desconectar. Verifique se o servidor está rodando.');
     }
   };
 
-  const formatPhoneNumber = (value: string) => {
+  const formatPhoneNumber = (value: string): string => {
     const numbers = value.replace(/\D/g, '');
     
     if (numbers.length <= 2) {
@@ -314,6 +330,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
       case 'ready': return 'green';
       case 'AUTHENTICATED': return 'blue';
       case 'QR_CODE': return 'yellow';
+      case 'qr': return 'yellow';
       case 'INITIALIZING': return 'yellow';
       case 'AUTH_FAILURE': return 'red';
       case 'ERROR': return 'red';
@@ -327,6 +344,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
       case 'ready': return 'Conectado';
       case 'AUTHENTICATED': return 'Autenticado';
       case 'QR_CODE': return 'Aguardando leitura do QR Code';
+      case 'qr': return 'Aguardando leitura do QR Code';
       case 'INITIALIZING': return 'Inicializando...';
       case 'AUTH_FAILURE': return 'Falha na autenticação';
       case 'ERROR': return 'Erro na conexão';
@@ -392,8 +410,8 @@ const WhatsAppAttendanceSection: React.FC = () => {
           </label>
         </div>
 
-        {/* QR Code Display */}
-        {connectionStatus.status === 'QR_CODE' && qrCode && (
+        {/* QR Code Display - CORRIGIDO */}
+        {(connectionStatus.status === 'QR_CODE' || connectionStatus.status === 'qr') && qrCode && (
           <div className="mt-4 p-4 bg-white rounded-lg border-2 border-yellow-300">
             <div className="flex flex-col items-center">
               <div className="flex items-center gap-2 mb-3">
@@ -418,7 +436,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
             <button
               onClick={connectWhatsApp} // Removida a dependência da chave Gemini
               disabled={isConnecting}
-              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Power className="h-5 w-5" />
               {isConnecting ? 'Conectando...' : 'Conectar WhatsApp'}
@@ -426,7 +444,7 @@ const WhatsAppAttendanceSection: React.FC = () => {
           ) : (
             <button
               onClick={disconnectWhatsApp}
-              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+              className="flex items-center gap-2 px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
             >
               <Power className="h-5 w-5" />
               Desconectar WhatsApp
@@ -435,166 +453,113 @@ const WhatsAppAttendanceSection: React.FC = () => {
         </div>
       </div>
 
-      {/* Configuration Form */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}>
-          <h3 className="text-xl font-semibold text-gray-800">Configurações</h3>
-          <button
-            className="p-2 rounded-full hover:bg-gray-100"
-            aria-label={isConfigCollapsed ? 'Expandir configurações' : 'Recolher configurações'}
-          >
-            {isConfigCollapsed ? <ChevronDown className="h-5 w-5 text-gray-600" /> : <ChevronUp className="h-5 w-5 text-gray-600" />}
-          </button>
+      {/* Configuration Section */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div
+          onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}
+          className="p-6 cursor-pointer hover:bg-gray-50 flex items-center justify-between"
+        >
+          <h3 className="text-xl font-bold text-gray-800">Configurações</h3>
+          {isConfigCollapsed ? <ChevronDown /> : <ChevronUp />}
         </div>
 
         {!isConfigCollapsed && (
-          <div className="mt-4 pt-6 border-t border-gray-200 space-y-6">
-            {isConfigLoading ? (
-              <p>Carregando configurações...</p>
-            ) : (
-              <>
-                {/* Nome do Restaurante */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Building className="h-4 w-4" />
-                    Nome do Restaurante
-                  </label>
-                  <input
-                    type="text"
-                    value={config.restaurantName || ''}
-                    onChange={(e) => setConfig({ ...config, restaurantName: e.target.value })}
-                    placeholder="Ex: Pizzaria do Zé"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-
-                {/* Phone Number */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Phone className="h-4 w-4" />
-                    Número do WhatsApp
-                  </label>
-                  <input
-                    type="text"
-                    value={config.phoneNumber || ''}
-                    onChange={(e) => setConfig({ ...config, phoneNumber: formatPhoneNumber(e.target.value) })}
-                    placeholder="(64) 99999-9999"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Digite o número do WhatsApp que receberá os pedidos
-                  </p>
-                </div>
-
-                {/* Horário de Funcionamento */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Clock className="h-4 w-4" />
-                    Horário de Funcionamento
-                  </label>
-                  <input
-                    type="text"
-                    value={config.hours || ''}
-                    onChange={(e) => setConfig({ ...config, hours: e.target.value })}
-                    placeholder="Seg a Sex: 18h às 23h, Sáb e Dom: 18h às 00h"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-
-                {/* Endereço */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <MapPin className="h-4 w-4" />
-                    Endereço
-                  </label>
-                  <input
-                    type="text"
-                    value={config.address || ''}
-                    onChange={(e) => setConfig({ ...config, address: e.target.value })}
-                    placeholder="Rua das Pizzas, 123, Bairro Saboroso"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-
-                {/* Menu URL */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Link className="h-4 w-4" />
-                    Link do Cardápio/Página de Pedidos
-                  </label>
-                  <input
-                    type="url"
-                    value={config.menuUrl || ''}
-                    onChange={(e) => setConfig({ ...config, menuUrl: e.target.value })}
-                    placeholder="https://seu-site.com/pedido"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Este é o link que o agente enviará quando o cliente pedir o cardápio.
-                  </p>
-                </div>
-
-                {/* Mensagem de Boas-Vindas */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <MessageSquare className="h-4 w-4" />
-                    Mensagem de Boas-Vindas
-                  </label>
-                  <textarea
-                    value={config.welcomeMessage || ''}
-                    onChange={(e) => setConfig({ ...config, welcomeMessage: e.target.value })}
-                    placeholder="Olá! Bem-vindo à {restaurantName}. Como posso ajudar?"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    rows={3}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Use {'{restaurantName}'} para inserir o nome do restaurante automaticamente.</p>
-                </div>
-              </>
-            )}
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-4">
-              <button
-                onClick={saveConfig}
-                disabled={isSaving}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Save className="h-5 w-5" />
-                {isSaving ? 'Salvando...' : 'Salvar Configurações'}
-              </button>
+          <div className="p-6 border-t border-gray-200 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <Building className="h-4 w-4 inline mr-2" />
+                Nome do Restaurante
+              </label>
+              <input
+                type="text"
+                value={config.restaurantName}
+                onChange={(e) => setConfig({ ...config, restaurantName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Ex: Restaurante XYZ"
+              />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <Phone className="h-4 w-4 inline mr-2" />
+                Telefone WhatsApp
+              </label>
+              <input
+                type="tel"
+                value={config.phoneNumber}
+                onChange={(e) => setConfig({ ...config, phoneNumber: formatPhoneNumber(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="(XX) XXXXX-XXXX"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <Link className="h-4 w-4 inline mr-2" />
+                Link do Cardápio
+              </label>
+              <input
+                type="url"
+                value={config.menuUrl}
+                onChange={(e) => setConfig({ ...config, menuUrl: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="https://exemplo.com/cardapio"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <Clock className="h-4 w-4 inline mr-2" />
+                Horário de Funcionamento
+              </label>
+              <input
+                type="text"
+                value={config.hours}
+                onChange={(e) => setConfig({ ...config, hours: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Ex: 10:00 - 22:00"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <MapPin className="h-4 w-4 inline mr-2" />
+                Endereço
+              </label>
+              <input
+                type="text"
+                value={config.address}
+                onChange={(e) => setConfig({ ...config, address: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Ex: Rua Principal, 123"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <MessageSquare className="h-4 w-4 inline mr-2" />
+                Mensagem de Boas-vindas
+              </label>
+              <textarea
+                value={config.welcomeMessage}
+                onChange={(e) => setConfig({ ...config, welcomeMessage: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Mensagem que será enviada quando um cliente iniciar uma conversa"
+                rows={3}
+              />
+            </div>
+
+            <button
+              onClick={saveConfig}
+              disabled={isSaving}
+              className="w-full flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="h-5 w-5" />
+              {isSaving ? 'Salvando...' : 'Salvar Configurações'}
+            </button>
           </div>
         )}
       </div>
-
-      {/* Instructions */}
-      <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-3">Como funciona?</h3>
-        <ol className="space-y-2 text-sm text-blue-800">
-          <li className="flex gap-2">
-            <span className="font-bold">1.</span>
-            <span>Configure seu número do WhatsApp e o link do cardápio acima</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-bold">2.</span>
-            <span>Clique em "Salvar Configurações"</span>
-          </li>
-        </ol>
-      </div>
-    
-      {/* Server Status Warning - Agora mostra apenas se o servidor estiver offline */}
-      {connectionStatus.status === 'SERVER_OFFLINE' && (
-        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-            <div>
-              <h4 className="font-semibold text-yellow-900 mb-1">Servidor WhatsApp necessário</h4>
-              <p className="text-sm text-yellow-800">
-                Para usar esta funcionalidade, você precisa ter o servidor Node.js rodando. Execute: <code className="bg-yellow-100 px-2 py-1 rounded">yarn start</code> na pasta <code className="bg-yellow-100 px-2 py-1 rounded">server</code>.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
