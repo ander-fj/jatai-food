@@ -405,7 +405,7 @@ const AdminPage: React.FC = () => {
                 </a>
               )
           })}
-          <a href="/pedido" target="_blank" rel="noopener noreferrer" className="flex items-center px-4 py-2 rounded-md text-gray-300 hover:bg-gray-700 hover:text-white">
+          <a href={`/pedido?user=${username}`} target="_blank" rel="noopener noreferrer" className="flex items-center px-4 py-2 rounded-md text-gray-300 hover:bg-gray-700 hover:text-white">
             <ExternalLink className="mr-3" />
             {!isSidebarCollapsed && <span>Página de Pedidos</span>}
           </a>
