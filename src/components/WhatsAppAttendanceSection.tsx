@@ -216,6 +216,11 @@ const WhatsAppAttendanceSection: React.FC = () => {
       });
 
       toast.success(`Atendimento ${isActive ? 'ativado' : 'desativado'}!`);
+    } catch (error) {
+      console.error('❌ Erro ao atualizar status de atendimento:', error);
+      toast.error('Erro ao alterar status do atendimento.');
+      // Reverte a alteração visual em caso de erro
+      setConfig({ ...config, isActive: !isActive });
     }
   };
 
