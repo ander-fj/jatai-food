@@ -56,26 +56,35 @@ const WhatsAppAttendanceSection: React.FC = () => {
   }, [username]);
 
   useEffect(() => {
-    // Este efeito lida com a lógica de polling (verificação contínua).
+    let isMounted = true;
     const finalStates = ['ready', 'DISCONNECTED', 'AUTH_FAILURE', 'ERROR', 'SERVER_OFFLINE'];
+
     if (finalStates.includes(connectionStatus.status!)) {
-      return; // Para de verificar se atingiu um estado final.
+      return;
     }
 
-    const intervalId = setInterval(() => {
-      console.log(`Polling... Status atual: ${connectionStatus.status}`);
-      
-      // A verificação de status lida com a atualização de INITIALIZING para QR_CODE.
-      checkConnectionStatus();
-
-      // Busca a imagem do QR Code apenas quando o status já for QR_CODE.
-      // Isso evita o erro 404 no console enquanto o servidor ainda está inicializando.
-      if (connectionStatus.status === 'QR_CODE') {
-        fetchQrCode();
+    const poll = async () => {
+      if (!isMounted || finalStates.includes(connectionStatus.status!)) {
+        return;
       }
-    }, 3000); // Verifica a cada 3 segundos.
 
-    return () => clearInterval(intervalId);
+      console.log(`Polling... Status atual: ${connectionStatus.status}`);
+      await checkConnectionStatus();
+
+      if (connectionStatus.status === 'QR_CODE') {
+        await fetchQrCode();
+      }
+
+      // Agenda a próxima verificação apenas após a conclusão da atual.
+      setTimeout(poll, 3000);
+    };
+
+    const timeoutId = setTimeout(poll, 1000); // Inicia o polling após 1 segundo.
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
   }, [username, connectionStatus.status]);
 
   const loadConfig = async () => {
