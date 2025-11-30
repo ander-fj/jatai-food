@@ -323,7 +323,7 @@ const OrderHistoryPage: React.FC = () => {
         </div>
 
         {/* Filtros e busca (só aparecem após a primeira busca) */}
-        {orders.length > 0 && (
+        {hasSearched && (
           <div 
             className="bg-white p-4 shadow-sm mb-6"
             style={{
