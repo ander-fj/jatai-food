@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Pizza, Plus, ArrowLeft, LogOut, Trash2, Search, X, Package, Settings, Menu as MenuIcon, Tag, BarChart2, Smile, ChevronDown, ChevronUp, PenSquare, ChevronLeft, Route, ExternalLink, ChefHat, Utensils, DollarSign, PanelLeftClose, PanelRightClose, MessageCircle } from 'lucide-react';
 import { useNavigate, useParams, Navigate, Link, useSearchParams } from 'react-router-dom';
+import { getTenantRef } from '../config/firebase';
+import { ref, onValue, push, set } from 'firebase/database';
 import { useTheme } from '../contexts/ThemeContext';
 import AdminDeliveryMap from '../components/AdminDeliveryMap';
 import AdminOrdersMap from '../components/AdminOrdersMap';
@@ -99,6 +101,12 @@ interface EntregadorSelecionado {
   lng: number;
 }
 
+interface ProductType {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { username } = useParams<{ username: string }>();
@@ -131,6 +139,7 @@ const AdminPage: React.FC = () => {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState<boolean>(false);
   const [isDrawingArea, setIsDrawingArea] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>({});
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
     ORDER_STATUS_TABS.reduce((acc, tab) => ({ ...acc, [tab.id]: true }), {})

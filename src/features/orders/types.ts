@@ -34,25 +34,29 @@ export interface DeliveryPerson {
   trackingCode?: string;
 }
 
-export interface Pizza {
-  size: string;
-  firstHalf: string;
-  secondHalf: string;
-  quantity: number;
-  isHalfPizza: boolean; // true = meia pizza, false = pizza inteira
-}
-
-export interface Beverage {
+export interface NewOrderItem {
   id: string;
-  size: string;
+  name: string;
+  price: number;
   quantity: number;
+  size?: string;
+  type: string;
+  image?: string;
+  firstHalf?: string;
+  secondHalf?: string;
+  isHalfPizza?: boolean;
 }
 
 export interface NewOrder {
   customerName: string;
   phone: string;
   address: string;
-  pizzas: Pizza[];
-  beverages: Beverage[];
+  items: NewOrderItem[]; // Unified items array
   tableNumber?: string;
+  coupon?: {
+    code: string;
+    discount: number;
+  };
+  subtotal: number;
+  total: number;
 }

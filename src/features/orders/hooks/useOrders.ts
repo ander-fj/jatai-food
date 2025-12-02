@@ -204,7 +204,7 @@ export const useOrders = () => {
 
   const addOrder = async (newOrderData: NewOrder) => {
     console.log('🔄 Iniciando criação de pedido:', newOrderData);
-    if (!newOrderData || !newOrderData.pizzas || !newOrderData.beverages) {
+    if (!newOrderData || (!newOrderData.pizzas && !newOrderData.beverages && !newOrderData.produtos)) {
       const errorMsg = '❌ Dados do pedido inválidos. Faltando `pizzas` ou `beverages`.';
       console.error(errorMsg, newOrderData);
       toast.error(errorMsg);
@@ -216,69 +216,20 @@ export const useOrders = () => {
     
     console.log(`📍 Salvando pedido para tenant: ${tenantId}`);
     
+    // Simplificação: Usar os dados já processados do CustomerOrderPage
     const items = [
-      ...newOrderData.pizzas.map(pizza => {
-        if (!pizza.firstHalf) return null; // Ignorar pizzas incompletas
-        const firstFlavor = pizzaFlavors.find(f => f.id === pizza.firstHalf);
-        const secondFlavor = pizza.secondHalf ? pizzaFlavors.find(f => f.id === pizza.secondHalf) : null;
-        const sizeName = { 'p': 'Pequena', 'm': 'Média', 'g': 'Grande', 'gg': 'Família' }[pizza.size];
-        
-        let name = '';
-        if (pizza.isHalfPizza && secondFlavor) {
-          name = `Meia Pizza ${firstFlavor?.name} / ${secondFlavor.name}`;
-        } else if (pizza.isHalfPizza && !secondFlavor) {
-          name = `Meia Pizza ${firstFlavor?.name}`;
-        } else {
-          name = `Pizza Inteira ${firstFlavor?.name}`;
-        }
-        
-                  // Use the price provided in newOrderData.pizzas directly
-                  const itemPrice = pizza.price; 
-                  
-                  return {
-                    name,
-                    quantity: pizza.quantity,
-                    size: sizeName || pizza.size || '',
-                    isHalfPizza: pizza.isHalfPizza, // Ensure this is passed
-                    price: itemPrice // Use the price from newOrderData.pizzas
-                  };      }),
-      ...newOrderData.beverages.map(beverage => {
-        if (!beverage.id) return null; // Ignorar bebidas incompletas
-        const beverageItem = beverages.find(b => b.id === beverage.id);
-        const beverageSize = beverageItem?.sizes.find(s => s.size === beverage.size || s.size === 'Único');
-        return {
-          name: beverageItem?.name || '',
-          quantity: beverage.quantity,
-          size: beverage.size || 'Único',
-          price: beverage.price,
-          image: beverageItem?.image || '', // Adicionar imagem da bebida
-          type: 'beverage'
-        };
-      }),
-      ...newOrderData.lanches.map(lanche => {
-        const lancheItem = pizzaFlavors.find(f => f.id === lanche.id);
-        return {
-          name: lancheItem?.name || 'Lanche Desconhecido',
-          quantity: lanche.quantity,
-          price: lanche.price,
-          type: 'lanche'
-        };
-      }),
-      ...newOrderData.refeicoes.map(refeicao => {
-        const refeicaoItem = pizzaFlavors.find(f => f.id === refeicao.id);
-        return {
-          name: refeicaoItem?.name || 'Refeição Desconhecida',
-          quantity: refeicao.quantity,
-          price: refeicao.price,
-          type: 'refeicao'
-        };
-      })
-    ].filter(Boolean); // Remover itens nulos (incompletos)
+      ...newOrderData.pizzas,
+      ...newOrderData.beverages,
+      ...newOrderData.lanches,
+      ...newOrderData.refeicoes,
+      ...(newOrderData.produtos || []),
+    ].filter(Boolean);
 
-    const subtotal = items.reduce((sum, item) => sum + (item.price || 0), 0);
-    let total = subtotal;
+    // Usar os valores já calculados na página do cliente
+    const total = newOrderData.total;
+    const deliveryFeeApplied = newOrderData.deliveryFee || 0;
+    // A taxa de serviço não é calculada na página do cliente, então mantemos a lógica aqui
     let serviceFeeApplied = 0;
-    let deliveryFeeApplied = 0;
 
     // Garante que pedidos de mesa (com tableNumber) sejam identificados como "Consumo no local"
     if (newOrderData.tableNumber) {
@@ -288,15 +239,10 @@ export const useOrders = () => {
 
     // Aplicar taxas com base no tipo de pedido
     if (newOrderData.tableNumber) {
+      const subtotal = newOrderData.subtotal || 0;
       // Pedido de salão: aplicar taxa de serviço
       serviceFeeApplied = subtotal * (serviceFee / 100);
-      total += serviceFeeApplied;
       console.log(`💲 Taxa de serviço de ${serviceFee}% aplicada: ${serviceFeeApplied.toFixed(2)}`);
-    } else if (newOrderData.address && newOrderData.address.toLowerCase() !== 'retirada') {
-      // Pedido de entrega (não é retirada): aplicar taxa de entrega percentual
-      deliveryFeeApplied = subtotal * (deliveryFee / 100);
-      total += deliveryFeeApplied;
-      console.log(`🚚 Taxa de entrega de ${deliveryFee}% aplicada: ${deliveryFeeApplied.toFixed(2)}`);
     }
 
     console.log(`Tentando geocodificar endereço: ${newOrderData.address}`);

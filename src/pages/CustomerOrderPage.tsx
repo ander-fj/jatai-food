@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart, X, Settings, ChevronDown, ChevronUp, Tag, Pizza } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -18,7 +20,7 @@ interface CartItem {
   price: number;
   quantity: number;
   size?: string;
-  type: 'pizza' | 'beverage' | 'lanche' | 'refeicao';
+  type: string; // Alterado para string para aceitar tipos dinâmicos
   image?: string;
   firstHalf?: string;
   secondHalf?: string;
@@ -71,6 +73,7 @@ const CustomerOrderPage: React.FC = () => {
     lanches: true,
     refeicoes: true,
     bebidas: true
+    // Este estado será gerenciado dinamicamente
   });
   const [showCart, setShowCart] = useState(false);
 
@@ -89,6 +92,37 @@ const CustomerOrderPage: React.FC = () => {
   const pizzasDoces = pizzaFlavors.filter(item => item.category === 'doce');
   const lanches = pizzaFlavors.filter(item => item.category === 'lanche');
   const refeicoes = pizzaFlavors.filter(item => item.category === 'refeicao');
+  // Agrupar itens por categoria dinamicamente
+  const menuSections = useMemo(() => {
+    const sections = new Map<string, any[]>();
+    
+    // Agrupa pizzas, lanches, etc.
+    pizzaFlavors.forEach(item => {
+      // Apenas processa itens que TÊM uma categoria definida.
+      if (item.category) {
+        if (!sections.has(item.category)) {
+          sections.set(item.category, []);
+        }
+        sections.get(item.category)?.push(item);
+      }
+    });
+
+    // Adiciona as bebidas em sua própria seção
+    if (beverages.length > 0) {
+      sections.set('bebidas', beverages);
+    }
+
+    return sections;
+  }, [pizzaFlavors, beverages]);
+
+  // Inicializa o estado das seções recolhidas
+  useEffect(() => {
+    const initialCollapsedState = {};
+    menuSections.forEach((_, key) => {
+      initialCollapsedState[key] = true; // Começam recolhidas
+    });
+    setCollapsedSections(initialCollapsedState);
+  }, [menuSections]);
 
   // Carregar cupons do Firebase
   useEffect(() => {
@@ -279,13 +313,13 @@ const CustomerOrderPage: React.FC = () => {
 
 
   // Função para adicionar lanche ou refeição ao carrinho
-  const handleAddItem = (item: any, type: 'lanche' | 'refeicao') => {
+  const handleAddItem = (item: any, type: string) => {
     addToCart({
       id: item.id,
       name: item.name,
       price: item.isPromotion && item.promotionPrice ? item.promotionPrice : item.price,
       quantity: 1,
-      type: type,
+      type: item.type || 'produto', // Usar o tipo do item ou 'produto' como padrão
       image: item.image
     });
   };
@@ -346,9 +380,9 @@ const CustomerOrderPage: React.FC = () => {
   };
 
   const getDeliveryFeeAmount = () => {
-    const subtotal = getSubtotal();
     if (!deliveryFee) return 0;
-    return (subtotal * deliveryFee) / 100;
+    const subtotal = getSubtotal();
+    return (subtotal * (deliveryFee || 0)) / 100;
   };
 
   const getTotalPrice = () => {
@@ -417,7 +451,7 @@ const CustomerOrderPage: React.FC = () => {
       const discountAmount = coupon.type === 'percentage' 
         ? `${coupon.discount}%` 
         : formatCurrency(coupon.discount);
-      alert(`✅ Cupom aplicado com sucesso! Desconto de ${discountAmount}`);
+      toast.success(`Cupom aplicado com sucesso! Desconto de ${discountAmount}`);
       
     } catch (error) {
       console.error('❌ Erro ao aplicar cupom:', error);
@@ -434,55 +468,63 @@ const CustomerOrderPage: React.FC = () => {
 
   const handleSubmitOrder = async () => {
     if (!customerInfo.name || !customerInfo.phone || !customerInfo.address) {
-      alert('Por favor, preencha todas as informações do cliente');
+      toast.warn('Por favor, preencha todas as informações do cliente');
       return;
     }
 
     if (cart.length === 0) {
-      alert('Adicione pelo menos um item ao carrinho');
+      toast.warn('Adicione pelo menos um item ao carrinho');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const pizzas = cart
-        .filter(item => item.type === 'pizza')
-        .map(item => ({
-          id: item.isHalfPizza ? `meia-${item.firstHalf}-${item.secondHalf}` : item.id,
-          name: item.name, // Adiciona o nome da pizza
-          size: item.size || 'm', // Usa o tamanho do item ou 'm' como padrão
-          firstHalf: item.firstHalf || item.id, // Usa firstHalf se existir, senão o id
-          secondHalf: item.secondHalf || '', // Usa secondHalf se existir, senão vazio
-          quantity: item.quantity,
-          isHalfPizza: item.isHalfPizza || false, // Usa isHalfPizza se existir, senão false
-          price: item.price // Adiciona o preço final do item
-        }));
+      // Categorizar itens do carrinho para corresponder à estrutura esperada por addOrder
+      const pizzas = cart.filter(item => item.type === 'pizza').map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        size: item.size ?? '',
+        firstHalf: item.firstHalf || '',
+        secondHalf: item.secondHalf || '',
+        isHalfPizza: item.isHalfPizza || false,
+      }));
 
-      const beverages = cart
-        .filter(item => item.type === 'beverage')
-        .map(item => ({
-          id: item.id,
-          size: item.size || '',
-          quantity: item.quantity,
-          price: item.price // Adiciona o preço final do item
-        }));
+      const beverages = cart.filter(item => item.type === 'bebidas').map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        size: item.size ?? 'Único',
+        image: item.image || '',
+      }));
 
-      const lanches = cart
-        .filter(item => item.type === 'lanche')
-        .map(item => ({
-          id: item.id,
-          quantity: item.quantity,
-          price: item.price
-        }));
+      const lanches = cart.filter(item => item.type === 'lanche').map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        image: item.image || '',
+      }));
 
-      const refeicoes = cart
-        .filter(item => item.type === 'refeicao')
-        .map(item => ({
-          id: item.id,
-          quantity: item.quantity,
-          price: item.price
-        }));
+      const refeicoes = cart.filter(item => item.type === 'refeicao').map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        image: item.image || '',
+      }));
+
+      const produtos = cart.filter(item => item.type === 'produto').map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        size: item.size ?? 'Único',
+        image: item.image || '',
+      }));
 
       const newOrder = {
         customerName: customerInfo.name,
@@ -492,18 +534,20 @@ const CustomerOrderPage: React.FC = () => {
         beverages,
         lanches,
         refeicoes,
+        produtos,
         coupon: appliedCoupon ? {
           code: appliedCoupon.code,
           discount: getDiscount()
         } : null,
         subtotal: getSubtotal(),
+        deliveryFee: getDeliveryFeeAmount(),
         total: getTotalPrice()
       };
 
       const createdOrder = await addOrder(newOrder);
       
       // Mostrar confirmação
-      alert(`✅ Pedido criado com sucesso!\n\nCódigo de rastreamento: ${createdOrder.trackingCode}\n\nVocê pode acompanhar seu pedido em: ${window.location.origin}/delivery-status/${createdOrder.trackingCode}`);
+      toast.success(`Pedido #${createdOrder.trackingCode} criado com sucesso!`);
       
       // Limpar carrinho e formulário
       setCart([]);
@@ -517,7 +561,7 @@ const CustomerOrderPage: React.FC = () => {
       
     } catch (error) {
       console.error('❌ Erro ao criar pedido:', error);
-      alert('Erro ao criar pedido. Tente novamente.');
+      toast.error('Erro ao criar pedido. Tente novamente.');
     } finally {
       setIsSubmitting(false);
     }
@@ -531,19 +575,19 @@ const CustomerOrderPage: React.FC = () => {
     }
   };
 
-  const handleBeverageClick = (beverage: any, size: any) => {
+  const handleAddItemWithSize = (item: any, size: any) => {
     addToCart({
-      id: beverage.id,
-      name: beverage.name,
+      id: item.id,
+      name: item.name,
       price: size.price,
       quantity: 1,
-      size: size.size,
-      type: 'beverage',
-      image: beverage.image
+      size: size.size, // Mantém o tamanho do item
+      type: item.type || 'produto', // Usa o tipo do item ou um padrão
+      image: item.image
     });
   };
 
-  const toggleSection = (section: 'salgadas' | 'especiais' | 'doces' | 'lanches' | 'refeicoes' | 'bebidas') => {
+  const toggleSection = (section: string) => {
     setCollapsedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -552,6 +596,7 @@ const CustomerOrderPage: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100" style={{ fontFamily: theme.fontFamily }}>
+      <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} />
       <Header />
       
       <main className="flex-1 container mx-auto px-3 sm:px-6 py-6 sm:py-12 max-w-6xl">
@@ -593,30 +638,40 @@ const CustomerOrderPage: React.FC = () => {
 
         {/* Menu - Agora ocupa toda a largura */}
         <div className="w-full">
-          {/* Pizzas Salgadas Section */}
-          {pizzasSalgadas.length > 0 && (
-            <div className="mb-8 sm:mb-12">
+          {/* Os blocos de código estáticos foram removidos para corrigir o erro de sintaxe. */}
+
+          {/* Renderização dinâmica das seções do menu */}
+          {Array.from(menuSections.entries()).map(([category, items]) => (
+            <div key={category} className="mb-8 sm:mb-12">
               <div 
                 className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 cursor-pointer group"
-                onClick={() => toggleSection('salgadas')}
+                onClick={() => toggleSection(category)}
               >
                 <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2">
-                  <span className="text-2xl sm:text-3xl">🍕</span>
+                  {/* Ícone pode ser dinâmico também no futuro */}
+                  <span className="text-2xl sm:text-3xl">
+                    {category === 'salgada' ? '🍕' : 
+                     category === 'especial' ? '⭐' : 
+                     category === 'doce' ? '🍰' :
+                     category === 'lanche' ? '🥪' :
+                     category === 'refeicao' ? '🍽️' :
+                     category === 'bebidas' ? '🥤' : '🍴'}
+                  </span>
                   <h2 
-                    className="text-xl sm:text-2xl font-bold"
+                    className="text-xl sm:text-2xl font-bold capitalize"
                     style={{ 
                       color: theme.textColor,
                       fontFamily: theme.fontFamily
                     }}
                   >
-                    Pizzas Salgadas
+                    {category.replace(/_/g, ' ')}
                   </h2>
                 </div>
                 <button
                   className="p-1 sm:p-2 rounded-full hover:bg-gray-100 transition-colors"
                   style={{ fontFamily: theme.fontFamily }}
                 >
-                  {collapsedSections.salgadas ? (
+                  {collapsedSections[category] ? (
                     <ChevronDown className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
                   ) : (
                     <ChevronUp className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
@@ -624,958 +679,133 @@ const CustomerOrderPage: React.FC = () => {
                 </button>
               </div>
               
-              {!collapsedSections.salgadas && (
-                <>
-                  <div className="text-center mb-6 sm:mb-8">
-                    <p 
-                      className="text-gray-600 text-base sm:text-lg"
-                      style={{ fontFamily: theme.fontFamily }}
+              {!collapsedSections[category] && (
+                <div className="space-y-2 sm:space-y-3 transition-all duration-300">
+                  {items.map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-200"
+                      style={{
+                        borderRadius: theme.borderRadius === 'none' ? '0' :
+                                     theme.borderRadius === 'sm' ? '0.125rem' :
+                                     theme.borderRadius === 'md' ? '0.375rem' :
+                                     theme.borderRadius === 'lg' ? '0.5rem' :
+                                     theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
+                        fontFamily: theme.fontFamily
+                      }}
                     >
-                      Sabores tradicionais e irresistíveis
-                    </p>
-                  </div>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
+                        <div className="flex-shrink-0 w-full sm:w-auto flex justify-center sm:justify-start">
+                          <img
+                            src={processImageUrl(item.image) || getDefaultImage(category === 'bebidas' ? 'beverage' : 'pizza')}
+                            alt={item.name}
+                            className="w-20 h-20 sm:w-24 sm:h-24 object-cover"
+                            style={{
+                              borderRadius: theme.borderRadius === 'none' ? '0' :
+                                           theme.borderRadius === 'sm' ? '0.125rem' :
+                                           theme.borderRadius === 'md' ? '0.375rem' :
+                                           theme.borderRadius === 'lg' ? '0.5rem' :
+                                           theme.borderRadius === 'xl' ? '0.75rem' : '50%'
+                            }}
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = getDefaultImage(category === 'bebidas' ? 'beverage' : 'pizza');
+                            }}
+                          />
+                        </div>
 
-                  <div className="space-y-2 sm:space-y-3 transition-all duration-300">
-                    {pizzasSalgadas.map((pizza) => (
-                      <div
-                        key={pizza.id}
-                        className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-200"
-                        style={{
-                          borderRadius: theme.borderRadius === 'none' ? '0' :
-                                       theme.borderRadius === 'sm' ? '0.125rem' :
-                                       theme.borderRadius === 'md' ? '0.375rem' :
-                                       theme.borderRadius === 'lg' ? '0.5rem' :
-                                       theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                          fontFamily: theme.fontFamily
-                        }}
-                      >
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
-                          {/* Imagem da Pizza */}
-                          <div className="flex-shrink-0 w-full sm:w-auto flex justify-center sm:justify-start">
-                            <img
-                              src={processImageUrl(pizza.image) || getDefaultImage('pizza')}
-                              alt={pizza.name}
-                              className="w-20 h-20 sm:w-24 sm:h-24 object-cover"
-                              style={{
-                                borderRadius: theme.borderRadius === 'none' ? '0' :
-                                             theme.borderRadius === 'sm' ? '0.125rem' :
-                                             theme.borderRadius === 'md' ? '0.375rem' :
-                                             theme.borderRadius === 'lg' ? '0.5rem' :
-                                             theme.borderRadius === 'xl' ? '0.75rem' : '50%'
-                              }}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = getDefaultImage('pizza');
-                              }}
-                            />
-                          </div>
-
-                          {/* Informações da Pizza */}
-                          <div className="flex-1 w-full">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                              <div className="flex-1">
-                                <h3 
-                                  className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center sm:text-left"
-                                  style={{ 
-                                    color: theme.textColor,
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  {pizza.name}
-                                  {pizza.isPromotion && (
-                                    <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                                      PROMOÇÃO
-                                    </span>
-                                  )}
-                                </h3>
-                                <p 
-                                  className="text-gray-600 mb-2 sm:mb-4 text-xs sm:text-sm leading-relaxed text-center sm:text-left"
-                                  style={{ fontFamily: theme.fontFamily }}
-                                >
-                                  {getProductDescription(pizza)}
-                                </p>
+                        <div className="flex-1 w-full">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                            <div className="flex-1">
+                              <h3 
+                                className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center sm:text-left"
+                                style={{ color: theme.textColor, fontFamily: theme.fontFamily }}
+                              >
+                                {item.name}
+                                {item.isPromotion && (
+                                  <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                                    PROMOÇÃO
+                                  </span>
+                                )}
+                              </h3>
+                              <p 
+                                className="text-gray-600 mb-2 sm:mb-4 text-xs sm:text-sm leading-relaxed text-center sm:text-left"
+                                style={{ fontFamily: theme.fontFamily }}
+                              >
+                                {getProductDescription(item)}
+                              </p>
+                              {item.price && (
                                 <div className="flex items-center justify-center sm:justify-start gap-4">
-                                  {pizza.isPromotion && pizza.promotionPrice ? (
+                                  {item.isPromotion && item.promotionPrice ? (
                                     <div className="flex items-center gap-2">
-                                      <span 
-                                        className="text-base sm:text-lg text-gray-500 line-through"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(pizza.price)}
+                                      <span className="text-base sm:text-lg text-gray-500 line-through" style={{ fontFamily: theme.fontFamily }}>
+                                        {formatCurrency(item.price)}
                                       </span>
-                                      <span 
-                                        className="text-xl sm:text-2xl font-bold text-red-600"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(pizza.promotionPrice)}
+                                      <span className="text-xl sm:text-2xl font-bold text-red-600" style={{ fontFamily: theme.fontFamily }}>
+                                        {formatCurrency(item.promotionPrice)}
                                       </span>
                                     </div>
                                   ) : (
-                                    <span 
-                                      className="text-xl sm:text-2xl font-bold"
-                                      style={{ 
-                                        color: theme.primaryColor,
-                                        fontFamily: theme.fontFamily
-                                      }}
-                                    >
-                                      {formatCurrency(pizza.price)}
+                                    <span className="text-xl sm:text-2xl font-bold" style={{ color: theme.primaryColor, fontFamily: theme.fontFamily }}>
+                                      {formatCurrency(item.price)}
                                     </span>
                                   )}
                                 </div>
-                              </div>
-
-                              {/* Botões de Ação */}
-                              <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto">
-                                <button
-                                  onClick={() => handleAddPizza(pizza, false)}
-                                  className="flex-1 sm:flex-none text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-1"
-                                  style={{
-                                    backgroundColor: theme.primaryColor,
-                                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="hidden sm:inline">Pizza </span>Inteira
-                                </button>
-                                <button
-                                  onClick={() => handleAddPizza(pizza, true)}
-                                  className="flex-1 sm:flex-none text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-1"
-                                  style={{
-                                    backgroundColor: theme.secondaryColor,
-                                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="hidden sm:inline">Meia </span>Pizza
-                                </button>
-                              </div>
+                              )}
                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
 
-          {/* Pizzas Especiais Section */}
-          {pizzasEspeciais.length > 0 && (
-            <div className="mb-8 sm:mb-12">
-              <div 
-                className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 cursor-pointer group"
-                onClick={() => toggleSection('especiais')}
-              >
-                <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2">
-                  <span className="text-2xl sm:text-3xl">⭐</span>
-                  <h2 
-                    className="text-xl sm:text-2xl font-bold"
-                    style={{ 
-                      color: theme.textColor,
-                      fontFamily: theme.fontFamily
-                    }}
-                  >
-                    Pizzas Especiais
-                  </h2>
-                </div>
-                <button
-                  className="p-1 sm:p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  style={{ fontFamily: theme.fontFamily }}
-                >
-                  {collapsedSections.especiais ? (
-                    <ChevronDown className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  ) : (
-                    <ChevronUp className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  )}
-                </button>
-              </div>
-              
-              {!collapsedSections.especiais && (
-                <>
-                  <div className="text-center mb-6 sm:mb-8">
-                    <p 
-                      className="text-gray-600 text-base sm:text-lg"
-                      style={{ fontFamily: theme.fontFamily }}
-                    >
-                      Criações exclusivas da casa
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 sm:space-y-3 transition-all duration-300">
-                    {pizzasEspeciais.map((pizza) => (
-                      <div
-                        key={pizza.id}
-                        className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-200"
-                        style={{
-                          borderRadius: theme.borderRadius === 'none' ? '0' :
-                                       theme.borderRadius === 'sm' ? '0.125rem' :
-                                       theme.borderRadius === 'md' ? '0.375rem' :
-                                       theme.borderRadius === 'lg' ? '0.5rem' :
-                                       theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                          fontFamily: theme.fontFamily
-                        }}
-                      >
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
-                          {/* Imagem da Pizza */}
-                          <div className="flex-shrink-0 w-full sm:w-auto flex justify-center sm:justify-start">
-                            <img
-                              src={processImageUrl(pizza.image) || getDefaultImage('pizza')}
-                              alt={pizza.name}
-                              className="w-20 h-20 sm:w-24 sm:h-24 object-cover"
-                              style={{
-                                borderRadius: theme.borderRadius === 'none' ? '0' :
-                                             theme.borderRadius === 'sm' ? '0.125rem' :
-                                             theme.borderRadius === 'md' ? '0.375rem' :
-                                             theme.borderRadius === 'lg' ? '0.5rem' :
-                                             theme.borderRadius === 'xl' ? '0.75rem' : '50%'
-                              }}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = getDefaultImage('pizza');
-                              }}
-                            />
-                          </div>
-
-                          {/* Informações da Pizza */}
-                          <div className="flex-1 w-full">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                              <div className="flex-1">
-                                <h3 
-                                  className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center sm:text-left"
-                                  style={{ 
-                                    color: theme.textColor,
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  {pizza.name}
-                                  {pizza.isPromotion && (
-                                    <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                                      PROMOÇÃO
-                                    </span>
-                                  )}
-                                </h3>
-                                <p 
-                                  className="text-gray-600 mb-2 sm:mb-4 text-xs sm:text-sm leading-relaxed text-center sm:text-left"
-                                  style={{ fontFamily: theme.fontFamily }}
-                                >
-                                  {getProductDescription(pizza)}
-                                </p>
-                                <div className="flex items-center justify-center sm:justify-start gap-4">
-                                  {pizza.isPromotion && pizza.promotionPrice ? (
-                                    <div className="flex items-center gap-2">
-                                      <span 
-                                        className="text-base sm:text-lg text-gray-500 line-through"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(pizza.price)}
-                                      </span>
-                                      <span 
-                                        className="text-xl sm:text-2xl font-bold text-red-600"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(pizza.promotionPrice)}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <span 
-                                      className="text-xl sm:text-2xl font-bold"
-                                      style={{ 
-                                        color: theme.primaryColor,
-                                        fontFamily: theme.fontFamily
-                                      }}
-                                    >
-                                      {formatCurrency(pizza.price)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Botões de Ação */}
-                              <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto">
-                                <button
-                                  onClick={() => handleAddPizza(pizza, false)}
-                                  className="flex-1 sm:flex-none text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-1"
-                                  style={{
-                                    backgroundColor: theme.primaryColor,
-                                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="hidden sm:inline">Pizza </span>Inteira
-                                </button>
-                                <button
-                                  onClick={() => handleAddPizza(pizza, true)}
-                                  className="flex-1 sm:flex-none text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-1"
-                                  style={{
-                                    backgroundColor: theme.secondaryColor,
-                                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="hidden sm:inline">Meia </span>Pizza
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Pizzas Doces Section */}
-          {pizzasDoces.length > 0 && (
-            <div className="mb-8 sm:mb-12">
-              <div 
-                className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 cursor-pointer group"
-                onClick={() => toggleSection('doces')}
-              >
-                <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2">
-                  <span className="text-2xl sm:text-3xl">🍰</span>
-                  <h2 
-                    className="text-xl sm:text-2xl font-bold"
-                    style={{ 
-                      color: theme.textColor,
-                      fontFamily: theme.fontFamily
-                    }}
-                  >
-                    Pizzas Doces
-                  </h2>
-                </div>
-                <button
-                  className="p-1 sm:p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  style={{ fontFamily: theme.fontFamily }}
-                >
-                  {collapsedSections.doces ? (
-                    <ChevronDown className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  ) : (
-                    <ChevronUp className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  )}
-                </button>
-              </div>
-              
-              {!collapsedSections.doces && (
-                <>
-                  <div className="text-center mb-6 sm:mb-8">
-                    <p 
-                      className="text-gray-600 text-base sm:text-lg"
-                      style={{ fontFamily: theme.fontFamily }}
-                    >
-                      Sabores doces para finalizar
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 sm:space-y-3 transition-all duration-300">
-                    {pizzasDoces.map((pizza) => (
-                      <div
-                        key={pizza.id}
-                        className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-200"
-                        style={{
-                          borderRadius: theme.borderRadius === 'none' ? '0' :
-                                       theme.borderRadius === 'sm' ? '0.125rem' :
-                                       theme.borderRadius === 'md' ? '0.375rem' :
-                                       theme.borderRadius === 'lg' ? '0.5rem' :
-                                       theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                          fontFamily: theme.fontFamily
-                        }}
-                      >
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
-                          {/* Imagem da Pizza */}
-                          <div className="flex-shrink-0 w-full sm:w-auto flex justify-center sm:justify-start">
-                            <img
-                              src={processImageUrl(pizza.image) || getDefaultImage('pizza')}
-                              alt={pizza.name}
-                              className="w-20 h-20 sm:w-24 sm:h-24 object-cover"
-                              style={{
-                                borderRadius: theme.borderRadius === 'none' ? '0' :
-                                             theme.borderRadius === 'sm' ? '0.125rem' :
-                                             theme.borderRadius === 'md' ? '0.375rem' :
-                                             theme.borderRadius === 'lg' ? '0.5rem' :
-                                             theme.borderRadius === 'xl' ? '0.75rem' : '50%'
-                              }}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = getDefaultImage('pizza');
-                              }}
-                            />
-                          </div>
-
-                          {/* Informações da Pizza */}
-                          <div className="flex-1 w-full">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                              <div className="flex-1">
-                                <h3 
-                                  className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center sm:text-left"
-                                  style={{ 
-                                    color: theme.textColor,
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  {pizza.name}
-                                  {pizza.isPromotion && (
-                                    <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                                      PROMOÇÃO
-                                    </span>
-                                  )}
-                                </h3>
-                                <p 
-                                  className="text-gray-600 mb-2 sm:mb-4 text-xs sm:text-sm leading-relaxed text-center sm:text-left"
-                                  style={{ fontFamily: theme.fontFamily }}
-                                >
-                                  {getProductDescription(pizza)}
-                                </p>
-                                <div className="flex items-center justify-center sm:justify-start gap-4">
-                                  {pizza.isPromotion && pizza.promotionPrice ? (
-                                    <div className="flex items-center gap-2">
-                                      <span 
-                                        className="text-base sm:text-lg text-gray-500 line-through"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(pizza.price)}
-                                      </span>
-                                      <span 
-                                        className="text-xl sm:text-2xl font-bold text-red-600"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(pizza.promotionPrice)}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <span 
-                                      className="text-xl sm:text-2xl font-bold"
-                                      style={{ 
-                                        color: theme.primaryColor,
-                                        fontFamily: theme.fontFamily
-                                      }}
-                                    >
-                                      {formatCurrency(pizza.price)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Botões de Ação */}
-                              <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto">
-                                <button
-                                  onClick={() => handleAddPizza(pizza, false)}
-                                  className="flex-1 sm:flex-none text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-1"
-                                  style={{
-                                    backgroundColor: theme.primaryColor,
-                                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="hidden sm:inline">Pizza </span>Inteira
-                                </button>
-                                <button
-                                  onClick={() => handleAddPizza(pizza, true)}
-                                  className="flex-1 sm:flex-none text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-1"
-                                  style={{
-                                    backgroundColor: theme.secondaryColor,
-                                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="hidden sm:inline">Meia </span>Pizza
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Lanches Section */}
-          {lanches.length > 0 && (
-            <div className="mb-8 sm:mb-12">
-              <div 
-                className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 cursor-pointer group"
-                onClick={() => toggleSection('lanches')}
-              >
-                <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2">
-                  <span className="text-2xl sm:text-3xl">🥪</span>
-                  <h2 
-                    className="text-xl sm:text-2xl font-bold"
-                    style={{ 
-                      color: theme.textColor,
-                      fontFamily: theme.fontFamily
-                    }}
-                  >
-                    Lanches
-                  </h2>
-                </div>
-                <button
-                  className="p-1 sm:p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  style={{ fontFamily: theme.fontFamily }}
-                >
-                  {collapsedSections.lanches ? (
-                    <ChevronDown className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  ) : (
-                    <ChevronUp className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  )}
-                </button>
-              </div>
-              
-              {!collapsedSections.lanches && (
-                <>
-                  <div className="text-center mb-6 sm:mb-8">
-                    <p 
-                      className="text-gray-600 text-base sm:text-lg"
-                      style={{ fontFamily: theme.fontFamily }}
-                    >
-                      Deliciosos lanches para qualquer hora
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 sm:space-y-3 transition-all duration-300">
-                    {lanches.map((lanche) => (
-                      <div
-                        key={lanche.id}
-                        className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-200"
-                        style={{
-                          borderRadius: theme.borderRadius === 'none' ? '0' :
-                                       theme.borderRadius === 'sm' ? '0.125rem' :
-                                       theme.borderRadius === 'md' ? '0.375rem' :
-                                       theme.borderRadius === 'lg' ? '0.5rem' :
-                                       theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                          fontFamily: theme.fontFamily
-                        }}
-                      >
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
-                          {/* Imagem do Lanche */}
-                          <div className="flex-shrink-0 w-full sm:w-auto flex justify-center sm:justify-start">
-                            <img
-                              src={processImageUrl(lanche.image) || getDefaultImage('pizza')}
-                              alt={lanche.name}
-                              className="w-20 h-20 sm:w-24 sm:h-24 object-cover"
-                              style={{
-                                borderRadius: theme.borderRadius === 'none' ? '0' :
-                                             theme.borderRadius === 'sm' ? '0.125rem' :
-                                             theme.borderRadius === 'md' ? '0.375rem' :
-                                             theme.borderRadius === 'lg' ? '0.5rem' :
-                                             theme.borderRadius === 'xl' ? '0.75rem' : '50%'
-                              }}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = getDefaultImage('pizza');
-                              }}
-                            />
-                          </div>
-
-                          {/* Informações do Lanche */}
-                          <div className="flex-1 w-full">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                              <div className="flex-1">
-                                <h3 
-                                  className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center sm:text-left"
-                                  style={{ 
-                                    color: theme.textColor,
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  {lanche.name}
-                                  {lanche.isPromotion && (
-                                    <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                                      PROMOÇÃO
-                                    </span>
-                                  )}
-                                </h3>
-                                <p 
-                                  className="text-gray-600 mb-2 sm:mb-4 text-xs sm:text-sm leading-relaxed text-center sm:text-left"
-                                  style={{ fontFamily: theme.fontFamily }}
-                                >
-                                  {getProductDescription(lanche)}
-                                </p>
-                                <div className="flex items-center justify-center sm:justify-start gap-4">
-                                  {lanche.isPromotion && lanche.promotionPrice ? (
-                                    <div className="flex items-center gap-2">
-                                      <span 
-                                        className="text-base sm:text-lg text-gray-500 line-through"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(lanche.price)}
-                                      </span>
-                                      <span 
-                                        className="text-xl sm:text-2xl font-bold text-red-600"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(lanche.promotionPrice)}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <span 
-                                      className="text-xl sm:text-2xl font-bold"
-                                      style={{ 
-                                        color: theme.primaryColor,
-                                        fontFamily: theme.fontFamily
-                                      }}
-                                    >
-                                      {formatCurrency(lanche.price)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Botão de Ação */}
-                              <div className="flex flex-row gap-2 w-full sm:w-auto">
-                                <button
-                                  onClick={() => handleAddItem(lanche, 'lanche')}
-                                  className="flex-1 sm:flex-none text-white px-4 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-2"
-                                  style={{
-                                    backgroundColor: theme.primaryColor,
-                                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  <Plus className="h-4 w-4" />
-                                  Adicionar
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Refeições Section */}
-          {refeicoes.length > 0 && (
-            <div className="mb-8 sm:mb-12">
-              <div 
-                className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 cursor-pointer group"
-                onClick={() => toggleSection('refeicoes')}
-              >
-                <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2">
-                  <span className="text-2xl sm:text-3xl">🍽️</span>
-                  <h2 
-                    className="text-xl sm:text-2xl font-bold"
-                    style={{ 
-                      color: theme.textColor,
-                      fontFamily: theme.fontFamily
-                    }}
-                  >
-                    Refeições
-                  </h2>
-                </div>
-                <button
-                  className="p-1 sm:p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  style={{ fontFamily: theme.fontFamily }}
-                >
-                  {collapsedSections.refeicoes ? (
-                    <ChevronDown className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  ) : (
-                    <ChevronUp className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  )}
-                </button>
-              </div>
-              
-              {!collapsedSections.refeicoes && (
-                <>
-                  <div className="text-center mb-6 sm:mb-8">
-                    <p 
-                      className="text-gray-600 text-base sm:text-lg"
-                      style={{ fontFamily: theme.fontFamily }}
-                    >
-                      Pratos completos e saborosos
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 sm:space-y-3 transition-all duration-300">
-                    {refeicoes.map((refeicao) => (
-                      <div
-                        key={refeicao.id}
-                        className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-200"
-                        style={{
-                          borderRadius: theme.borderRadius === 'none' ? '0' :
-                                       theme.borderRadius === 'sm' ? '0.125rem' :
-                                       theme.borderRadius === 'md' ? '0.375rem' :
-                                       theme.borderRadius === 'lg' ? '0.5rem' :
-                                       theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                          fontFamily: theme.fontFamily
-                        }}
-                      >
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
-                          {/* Imagem da Refeição */}
-                          <div className="flex-shrink-0 w-full sm:w-auto flex justify-center sm:justify-start">
-                            <img
-                              src={processImageUrl(refeicao.image) || getDefaultImage('pizza')}
-                              alt={refeicao.name}
-                              className="w-20 h-20 sm:w-24 sm:h-24 object-cover"
-                              style={{
-                                borderRadius: theme.borderRadius === 'none' ? '0' :
-                                             theme.borderRadius === 'sm' ? '0.125rem' :
-                                             theme.borderRadius === 'md' ? '0.375rem' :
-                                             theme.borderRadius === 'lg' ? '0.5rem' :
-                                             theme.borderRadius === 'xl' ? '0.75rem' : '50%'
-                              }}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = getDefaultImage('pizza');
-                              }}
-                            />
-                          </div>
-
-                          {/* Informações da Refeição */}
-                          <div className="flex-1 w-full">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                              <div className="flex-1">
-                                <h3 
-                                  className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center sm:text-left"
-                                  style={{ 
-                                    color: theme.textColor,
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  {refeicao.name}
-                                  {refeicao.isPromotion && (
-                                    <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                                      PROMOÇÃO
-                                    </span>
-                                  )}
-                                </h3>
-                                <p 
-                                  className="text-gray-600 mb-2 sm:mb-4 text-xs sm:text-sm leading-relaxed text-center sm:text-left"
-                                  style={{ fontFamily: theme.fontFamily }}
-                                >
-                                  {getProductDescription(refeicao)}
-                                </p>
-                                <div className="flex items-center justify-center sm:justify-start gap-4">
-                                  {refeicao.isPromotion && refeicao.promotionPrice ? (
-                                    <div className="flex items-center gap-2">
-                                      <span 
-                                        className="text-base sm:text-lg text-gray-500 line-through"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(refeicao.price)}
-                                      </span>
-                                      <span 
-                                        className="text-xl sm:text-2xl font-bold text-red-600"
-                                        style={{ fontFamily: theme.fontFamily }}
-                                      >
-                                        {formatCurrency(refeicao.promotionPrice)}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <span 
-                                      className="text-xl sm:text-2xl font-bold"
-                                      style={{ 
-                                        color: theme.primaryColor,
-                                        fontFamily: theme.fontFamily
-                                      }}
-                                    >
-                                      {formatCurrency(refeicao.price)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Botão de Ação */}
-                              <div className="flex flex-row gap-2 w-full sm:w-auto">
-                                <button
-                                  onClick={() => handleAddItem(refeicao, 'refeicao')}
-                                  className="flex-1 sm:flex-none text-white px-4 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-2"
-                                  style={{
-                                    backgroundColor: theme.primaryColor,
-                                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  <Plus className="h-4 w-4" />
-                                  Adicionar
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Bebidas Section */}
-          {beverages.length > 0 && (
-            <div className="mb-8 sm:mb-12">
-              <div 
-                className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 cursor-pointer group"
-                onClick={() => toggleSection('bebidas')}
-              >
-                <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2">
-                  <span className="text-2xl sm:text-3xl">🥤</span>
-                  <h2 
-                    className="text-xl sm:text-2xl font-bold"
-                    style={{ 
-                      color: theme.textColor,
-                      fontFamily: theme.fontFamily
-                    }}
-                  >
-                    Bebidas
-                  </h2>
-                </div>
-                <button
-                  className="p-1 sm:p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  style={{ fontFamily: theme.fontFamily }}
-                >
-                  {collapsedSections.bebidas ? (
-                    <ChevronDown className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  ) : (
-                    <ChevronUp className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" />
-                  )}
-                </button>
-              </div>
-              
-              {!collapsedSections.bebidas && (
-                <>
-                  <div className="text-center mb-6 sm:mb-8">
-                    <p 
-                      className="text-gray-600 text-base sm:text-lg"
-                      style={{ fontFamily: theme.fontFamily }}
-                    >
-                      Bebidas geladas para acompanhar
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 sm:space-y-3 transition-all duration-300">
-                    {beverages.map((beverage) => (
-                      <div
-                        key={beverage.id}
-                        className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-200"
-                        style={{
-                          borderRadius: theme.borderRadius === 'none' ? '0' :
-                                       theme.borderRadius === 'sm' ? '0.125rem' :
-                                       theme.borderRadius === 'md' ? '0.375rem' :
-                                       theme.borderRadius === 'lg' ? '0.5rem' :
-                                       theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                          fontFamily: theme.fontFamily
-                        }}
-                      >
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
-                          {/* Imagem da Bebida */}
-                          <div className="flex-shrink-0 w-full sm:w-auto flex justify-center sm:justify-start">
-                            <img
-                              src={processImageUrl(beverage.image) || getDefaultImage('beverage')}
-                              alt={beverage.name}
-                              className="w-20 h-20 sm:w-24 sm:h-24 object-cover"
-                              style={{
-                                borderRadius: theme.borderRadius === 'none' ? '0' :
-                                             theme.borderRadius === 'sm' ? '0.125rem' :
-                                             theme.borderRadius === 'md' ? '0.375rem' :
-                                             theme.borderRadius === 'lg' ? '0.5rem' :
-                                             theme.borderRadius === 'xl' ? '0.75rem' : '50%'
-                              }}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = getDefaultImage('beverage');
-                              }}
-                            />
-                          </div>
-
-                          {/* Informações da Bebida */}
-                          <div className="flex-1 w-full">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                              <div className="flex-1">
-                                <h3 
-                                  className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center sm:text-left"
-                                  style={{ 
-                                    color: theme.textColor,
-                                    fontFamily: theme.fontFamily
-                                  }}
-                                >
-                                  {beverage.name}
-                                </h3>
-                                <p 
-                                  className="text-gray-600 mb-2 sm:mb-4 text-xs sm:text-sm leading-relaxed text-center sm:text-left"
-                                  style={{ fontFamily: theme.fontFamily }}
-                                >
-                                  {beverage.description || 'Bebida refrescante'}
-                                </p>
-                              </div>
-
-                              {/* Tamanhos e Preços */}
-                              <div className="flex flex-col gap-2 w-full sm:w-auto">
-                                {beverage.sizes.map((size, index) => (
+                            <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto">
+                              {category.includes('pizza') || ['salgada', 'doce', 'especial'].includes(category) ? (
+                                <>
+                                  <button
+                                    onClick={() => handleAddPizza(item, false)}
+                                    className="flex-1 sm:flex-none text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-1"
+                                    style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius, fontFamily: theme.fontFamily }}
+                                  >
+                                    <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    <span className="hidden sm:inline">Pizza </span>Inteira
+                                  </button>
+                                  <button
+                                    onClick={() => handleAddPizza(item, true)}
+                                    className="flex-1 sm:flex-none text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-1"
+                                    style={{ backgroundColor: theme.secondaryColor, borderRadius: theme.borderRadius, fontFamily: theme.fontFamily }}
+                                  >
+                                    <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    <span className="hidden sm:inline">Meia </span>Pizza
+                                  </button>
+                                </>
+                              ) : (item.sizes && item.sizes.length > 0) ? (
+                                item.sizes.map((size, index) => (
                                   <button
                                     key={index}
-                                    onClick={() => handleBeverageClick(beverage, size)}
+                                    onClick={() => handleAddItemWithSize(item, size)}
                                     className="text-white px-3 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-between gap-2"
-                                    style={{
-                                      backgroundColor: theme.primaryColor,
-                                      borderRadius: theme.borderRadius === 'none' ? '0' :
-                                                   theme.borderRadius === 'sm' ? '0.125rem' :
-                                                   theme.borderRadius === 'md' ? '0.375rem' :
-                                                   theme.borderRadius === 'lg' ? '0.5rem' :
-                                                   theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                                      fontFamily: theme.fontFamily
-                                    }}
+                                    style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius, fontFamily: theme.fontFamily }}
                                   >
                                     <span>{size.size}</span>
                                     <span>{formatCurrency(size.price)}</span>
                                   </button>
-                                ))}
-                              </div>
+                                ))
+                              ) : (
+                                <button
+                                  onClick={() => handleAddItem(item, category)}
+                                  className="flex-1 sm:flex-none text-white px-4 py-2 text-sm font-medium transition-colors hover:opacity-90 flex items-center justify-center gap-2"
+                                  style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius, fontFamily: theme.fontFamily }}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                  Adicionar
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          )}
+          ))}
         </div>
 
         {/* Carrinho Flutuante */}
@@ -1700,6 +930,15 @@ const CustomerOrderPage: React.FC = () => {
 
                   {/* Resumo do Pedido */}
                   <div className="border-t pt-4">
+                    <h4 className="font-medium mb-2">Itens do Pedido:</h4>
+                    <div className="space-y-1 text-sm mb-4">
+                      {cart.map((item, index) => (
+                        <div key={index} className="flex justify-between">
+                          <span>{item.name} x {item.quantity}</span>
+                          <span>{formatCurrency(item.price * item.quantity)}</span>
+                        </div>
+                      ))}
+                    </div>
                     <h4 className="font-medium mb-2">Resumo do Pedido:</h4>
                     <div className="space-y-1 text-sm mb-4">
                       <div className="flex justify-between">
@@ -1793,6 +1032,15 @@ const CustomerOrderPage: React.FC = () => {
 
                 {/* Resumo do Pedido */}
                 <div className="border-t pt-4">
+                  <h4 className="font-medium mb-2">Itens do Pedido:</h4>
+                  <div className="space-y-1 text-sm mb-4">
+                    {cart.map((item, index) => (
+                      <div key={index} className="flex justify-between">
+                        <span>{item.name} x {item.quantity}</span>
+                        <span>{formatCurrency(item.price * item.quantity)}</span>
+                      </div>
+                    ))}
+                  </div>
                   <h4 className="font-medium mb-2">Resumo do Pedido:</h4>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Image as ImageIcon, Download, Upload, X, Coffee, Utensils, Sandwich, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, Image as ImageIcon, Download, Upload, X, Coffee, Utensils, Sandwich, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { getTenantRef } from '../config/firebase';
+import { ref, onValue, push, set, remove, update } from 'firebase/database';
 import { useMenu } from '../features/orders/hooks/useMenu';
 import ImageUploadModal from './ImageUploadModal';
 import ExcelImport from './ExcelImport';
@@ -43,7 +45,11 @@ interface EditingItem {
   description: string;
 }
 
-const MenuManagementSection: React.FC = () => {
+interface MenuManagementSectionProps {
+  productTypes?: { id: string; name: string }[];
+}
+
+const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
   const { theme } = useTheme();
   const { 
     pizzaFlavors, 
@@ -56,30 +62,21 @@ const MenuManagementSection: React.FC = () => {
     deleteBeverage 
   } = useMenu();
 
+  // Estados para tipos e categorias dinâmicos
+  const [productTypes, setProductTypes] = useState<{ id: string; name: string }[]>([]);
+  const [productCategories, setProductCategories] = useState<{ id: string; name: string }[]>([]);
+
   const [editingItem, setEditingItem] = useState<EditingItem | null>(null);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showExcelImport, setShowExcelImport] = useState(false);
   const [showGoogleSheetsImport, setShowGoogleSheetsImport] = useState(false);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [isManagingTypes, setIsManagingTypes] = useState(false);
   const [newItemType, setNewItemType] = useState<'pizza' | 'bebida' | 'lanche' | 'refeicao'>('pizza');
   const [showNewItemForm, setShowNewItemForm] = useState(false);
 
   // Estados para controlar seções recolhidas
-  const [collapsedSections, setCollapsedSections] = useState<{
-    pizzasSalgadas: boolean;
-    pizzasEspeciais: boolean;
-    pizzasDoces: boolean;
-    lanches: boolean;
-    refeicoes: boolean;
-    bebidas: boolean;
-  }>({
-    pizzasSalgadas: false,
-    pizzasEspeciais: false,
-    pizzasDoces: false,
-    lanches: false,
-    refeicoes: false,
-    bebidas: false
-  });
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   // Novo item sendo criado
   const [newItem, setNewItem] = useState<EditingItem>({
@@ -94,12 +91,145 @@ const MenuManagementSection: React.FC = () => {
     description: ''
   });
 
-  // Filtrar itens por categoria
-  const pizzasSalgadas = pizzaFlavors.filter(item => item.category === 'salgada');
-  const pizzasEspeciais = pizzaFlavors.filter(item => item.category === 'especial');
-  const pizzasDoces = pizzaFlavors.filter(item => item.category === 'doce');
-  const lanches = pizzaFlavors.filter(item => item.category === 'lanche');
-  const refeicoes = pizzaFlavors.filter(item => item.category === 'refeicao');
+  // Carregar tipos e categorias do Firebase
+  useEffect(() => {
+    const typesRef = getTenantRef('product_types');
+    const categoriesRef = getTenantRef('product_categories');
+
+    const unsubscribeTypes = onValue(typesRef, (snapshot) => {
+      const data = snapshot.val();
+      const typesList = data ? Object.entries(data).map(([id, type]: any) => ({ id, name: type.name })) : [];
+      setProductTypes(typesList);
+    });
+
+    const unsubscribeCategories = onValue(categoriesRef, (snapshot) => {
+      const data = snapshot.val();
+      const categoriesList = data ? Object.entries(data).map(([id, cat]: any) => ({ id, name: cat.name })) : [];
+      setProductCategories(categoriesList);
+    });
+
+    return () => {
+      unsubscribeTypes();
+      unsubscribeCategories();
+    };
+  }, []);
+
+  const handleAddNewValue = async (entity: 'type' | 'category') => {
+    const entityName = entity === 'type' ? 'tipo' : 'categoria';
+    const newValue = prompt(`Digite o nome do novo ${entityName}:`);
+    if (newValue && newValue.trim()) {
+      const dbRef = getTenantRef(entity === 'type' ? 'product_types' : 'product_categories');
+      await set(push(dbRef), { name: newValue.trim() });
+    }
+  };
+
+  const handleEditValue = async (entity: 'type' | 'category', id: string, currentName: string) => {
+    const entityName = entity === 'type' ? 'tipo' : 'categoria';
+    const newValue = prompt(`Digite o novo nome para "${currentName}":`, currentName);
+    if (newValue && newValue.trim() && newValue.trim() !== currentName) {
+      const dbPath = entity === 'type' ? `product_types/${id}` : `product_categories/${id}`;
+      const dbRef = getTenantRef(dbPath);
+      await update(dbRef, { name: newValue.trim() });
+      alert(`${entityName} atualizado com sucesso!`);
+    }
+  };
+
+  const handleDeleteValue = async (entity: 'type' | 'category', id: string, name: string) => {
+    const entityName = entity === 'type' ? 'tipo' : 'categoria';
+    const isType = entity === 'type';
+
+    // Verificar se o tipo/categoria está em uso
+    const isUsed = pizzaFlavors.some(item => 
+      isType ? item.type?.toLowerCase() === name.toLowerCase() : item.category?.toLowerCase() === name.toLowerCase()
+    );
+
+    if (isUsed) {
+      alert(`Não é possível excluir o ${entityName} "${name}" pois ele está sendo utilizado em um ou mais itens do cardápio.`);
+      return;
+    }
+
+    if (confirm(`Tem certeza que deseja excluir o ${entityName} "${name}"?`)) {
+      const dbPath = isType ? `product_types/${id}` : `product_categories/${id}`;
+      const dbRef = getTenantRef(dbPath);
+      await remove(dbRef);
+      alert(`${entityName} excluído com sucesso!`);
+    }
+  };
+
+  const renderManageableList = (
+    title: string,
+    items: { id: string; name: string }[],
+    onEdit: (id: string, name: string) => void,
+    onDelete: (id: string, name: string) => void
+  ) => (
+    <div>
+      <h4 className="font-semibold text-gray-800 mb-2">{title}</h4>
+      <ul className="space-y-2">
+        {items.map(item => (
+          <li key={item.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+            <span className="text-sm">{item.name}</span>
+            <div className="flex gap-2">
+              <button onClick={() => onEdit(item.id, item.name)} className="text-blue-600 hover:text-blue-800"><Pencil size={16} /></button>
+              <button onClick={() => onDelete(item.id, item.name)} className="text-red-600 hover:text-red-800"><Trash2 size={16} /></button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
+  // Função para obter as categorias baseadas no tipo
+  const getCategoriesForType = (type: string) => {
+    switch (type) {
+      case 'pizza':
+        return [
+          { value: 'salgada', label: 'Salgada' },
+          { value: 'doce', label: 'Doce' },
+          { value: 'especial', label: 'Especial' }
+        ];
+      case 'lanche':
+        return [
+          { value: 'lanche', label: 'Lanche' }
+        ];
+      case 'refeicao':
+        return [
+          { value: 'refeicao', label: 'Refeição' }
+        ];
+      case 'bebida':
+      default:
+        return [];
+    }
+  };
+
+  // Função para obter a categoria padrão baseada no tipo
+  const getDefaultCategory = (type: string) => {
+    switch (type) {
+      case 'pizza': return 'salgada';
+      case 'lanche': return 'lanche';
+      case 'refeicao': return 'refeicao';
+      default: return '';
+    }
+  };
+
+  // Agrupar itens por categoria dinamicamente (igual à página do cliente)
+  const menuSections = React.useMemo(() => {
+    const sections = new Map<string, any[]>();
+    pizzaFlavors.forEach(item => {
+      const category = item.category || 'sem_categoria'; // Categoria padrão
+      if (!sections.has(category)) {
+        sections.set(category, []);
+      }
+      sections.get(category)?.push(item);
+    });
+    return sections;
+  }, [pizzaFlavors]);
+
+  // Inicializa o estado das seções recolhidas dinamicamente
+  useEffect(() => {
+    const initialCollapsedState: Record<string, boolean> = { bebidas: false };
+    menuSections.forEach((_, key) => { initialCollapsedState[key] = false; });
+    setCollapsedSections(initialCollapsedState);
+  }, [menuSections]);
 
   const resetNewItem = () => {
     setNewItem({
@@ -207,28 +337,27 @@ const MenuManagementSection: React.FC = () => {
 
   const handleSaveNewItem = async () => {
     try {
-      if (newItem.type === 'pizza' || newItem.type === 'lanche' || newItem.type === 'refeicao') {
-        await addPizzaFlavor({
-          name: newItem.name,
-          price: newItem.price,
-          image: newItem.image,
-          ingredients: newItem.ingredients,
-          category: newItem.category
-        });
+      let itemData: any = {
+        name: newItem.name,
+        type: newItem.type,
+        category: newItem.category,
+        image: newItem.image,
+      };
+
+      if (['pizza', 'lanche', 'refeicao'].includes(newItem.type)) {
+        itemData.price = newItem.price;
+        itemData.ingredients = newItem.ingredients;
       } else {
         const validSizes = newItem.sizes.filter(size => size.size.trim() && size.price > 0);
         if (validSizes.length === 0) {
-          alert('Adicione pelo menos um tamanho válido para a bebida');
+          alert(`Para o tipo "${newItem.type}", adicione pelo menos um tamanho com nome e preço válidos.`);
           return;
         }
-
-        await addBeverage({
-          name: newItem.name,
-          sizes: validSizes,
-          image: newItem.image,
-          description: newItem.description
-        });
+        itemData.sizes = validSizes;
+        itemData.description = newItem.description;
       }
+
+      await addPizzaFlavor(itemData);
 
       resetNewItem();
       setShowNewItemForm(false);
@@ -301,46 +430,8 @@ const MenuManagementSection: React.FC = () => {
     setEditingItem({ ...editingItem, sizes: newSizes });
   };
 
-  // Função para obter as categorias baseadas no tipo
-  const getCategoriesForType = (type: 'pizza' | 'bebida' | 'lanche' | 'refeicao') => {
-    switch (type) {
-      case 'pizza':
-        return [
-          { value: 'salgada', label: 'Salgada' },
-          { value: 'doce', label: 'Doce' },
-          { value: 'especial', label: 'Especial' }
-        ];
-      case 'lanche':
-        return [
-          { value: 'lanche', label: 'Lanche' }
-        ];
-      case 'refeicao':
-        return [
-          { value: 'refeicao', label: 'Refeição' }
-        ];
-      case 'bebida':
-      default:
-        return [];
-    }
-  };
-
-  // Função para obter a categoria padrão baseada no tipo
-  const getDefaultCategory = (type: 'pizza' | 'bebida' | 'lanche' | 'refeicao') => {
-    switch (type) {
-      case 'pizza':
-        return 'salgada';
-      case 'lanche':
-        return 'lanche';
-      case 'refeicao':
-        return 'refeicao';
-      case 'bebida':
-      default:
-        return '';
-    }
-  };
-
   // Atualizar categoria quando o tipo mudar
-  const handleTypeChange = (type: 'pizza' | 'bebida' | 'lanche' | 'refeicao') => {
+  const handleTypeChange = (type: string, category?: string) => {
     setNewItem({
       ...newItem,
       type,
@@ -348,8 +439,34 @@ const MenuManagementSection: React.FC = () => {
     });
   };
 
+  // Combina tipos padrão com os tipos do Firebase, sem duplicatas
+  const combinedProductTypes = React.useMemo(() => {
+    const baseTypes = [{ name: 'pizza' }, { name: 'lanche' }, { name: 'refeicao' }, { name: 'bebida' }];
+    const allTypes = [...baseTypes, ...productTypes];
+    return allTypes.filter((type, index, self) => 
+      index === self.findIndex((t) => t.name.toLowerCase() === type.name.toLowerCase())
+    );
+  }, [productTypes]);
+
+  // Combina categorias padrão com as do Firebase, sem duplicatas
+  // Agora, todas as categorias padrão serão sempre incluídas, independentemente do tipo.
+  const combinedProductCategories = React.useMemo(() => {
+    const allDefaultCategories = [
+      { name: 'salgada', label: 'Salgada' },
+      { name: 'doce', label: 'Doce' },
+      { name: 'especial', label: 'Especial' },
+      { name: 'lanche', label: 'Lanche' },
+      { name: 'refeicao', label: 'Refeição' },
+      { name: 'bebida', label: 'Bebida' }, // Adiciona bebida como categoria padrão
+    ];
+    const allCategories = [...allDefaultCategories, ...productCategories.map(c => ({ name: c.name, label: c.name }))];
+    return allCategories.filter((cat, index, self) => 
+      index === self.findIndex((c) => c.name.toLowerCase() === cat.name.toLowerCase())
+    );
+  }, [productCategories]);
+
   // Função para alternar seção recolhida
-  const toggleSection = (section: keyof typeof collapsedSections) => {
+  const toggleSection = (section: string) => {
     setCollapsedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -361,7 +478,7 @@ const MenuManagementSection: React.FC = () => {
     title: string,
     emoji: string,
     items: PizzaFlavor[],
-    sectionKey: keyof typeof collapsedSections,
+    sectionKey: string,
     handleEdit: (item: PizzaFlavor) => void,
     handleDelete: (id: string) => void
   ) => {
@@ -445,13 +562,25 @@ const MenuManagementSection: React.FC = () => {
                     <p className="text-sm text-gray-600 mt-1">
                       {item.ingredients || 'Sem descrição'}
                     </p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span 
-                        className="font-semibold"
-                        style={{ color: theme.primaryColor }}
-                      >
-                        R$ {item.price.toFixed(2)}
-                      </span>
+                    <div className="mt-2">
+                      {item.sizes && item.sizes.length > 0 ? (
+                        <div className="space-y-1">
+                          {item.sizes.map((size, index) => (
+                            <div key={index} className="flex justify-between text-sm">
+                              <span>{size.size}</span>
+                              <span className="font-semibold" style={{ color: theme.primaryColor }}>
+                                {typeof size.price === 'number' ? `R$ ${size.price.toFixed(2)}` : 'Preço inválido'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold" style={{ color: theme.primaryColor }}>
+                            {typeof item.price === 'number' ? `R$ ${item.price.toFixed(2)}` : 'Preço inválido'}
+                          </span>
+                        </div>
+                      )}
                       <span 
                         className="text-xs px-2 py-1 rounded-full"
                         style={{ 
@@ -459,7 +588,7 @@ const MenuManagementSection: React.FC = () => {
                           color: theme.primaryColor
                         }}
                       >
-                        {item.category || 'salgada'}
+                        {item.category || 'Sem Categoria'}
                       </span>
                     </div>
                   </div>
@@ -581,6 +710,17 @@ const MenuManagementSection: React.FC = () => {
         </div>
       </div>
 
+      {/* Botão para Gerenciar Tipos e Categorias */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => setIsManagingTypes(!isManagingTypes)}
+          className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 transition-colors mb-4"
+        >
+          <Settings size={16} />
+          {isManagingTypes ? 'Ocultar Gerenciador' : 'Gerenciar Tipos e Categorias'}
+        </button>
+      </div>
+
       {/* Formulário para Novo Item */}
       {showNewItemForm && (
         <div 
@@ -622,8 +762,15 @@ const MenuManagementSection: React.FC = () => {
                 Tipo
               </label>
               <select
-                value={newItem.type}
-                onChange={(e) => handleTypeChange(e.target.value as 'pizza' | 'bebida' | 'lanche' | 'refeicao')}
+                value={newItem.type || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'add_new') {
+                    handleAddNewValue('type');
+                  } else {
+                    handleTypeChange(value as any);
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:border-transparent"
                 style={{
                   borderRadius: theme.borderRadius === 'none' ? '0' :
@@ -635,10 +782,13 @@ const MenuManagementSection: React.FC = () => {
                   '--tw-ring-color': theme.primaryColor
                 } as React.CSSProperties}
               >
-                <option value="pizza">🍕 Pizza</option>
-                <option value="lanche">🥪 Lanche</option>
-                <option value="refeicao">🍽️ Refeição</option>
-                <option value="bebida">🥤 Bebida</option>
+                <option value="" disabled>Selecione um tipo</option>
+                {combinedProductTypes.map(type => (
+                  <option key={type.name} value={type.name}>{type.name}</option>
+                ))}
+                <option value="add_new" className="font-bold text-blue-600">
+                  + Adicionar novo tipo...
+                </option>
               </select>
             </div>
 
@@ -671,7 +821,7 @@ const MenuManagementSection: React.FC = () => {
             </div>
 
             {/* Preço (para todos exceto bebidas) */}
-            {newItem.type !== 'bebida' && (
+            {['pizza', 'lanche', 'refeicao'].includes(newItem.type) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Preço
@@ -698,7 +848,7 @@ const MenuManagementSection: React.FC = () => {
             )}
 
             {/* Ingredientes/Descrição */}
-            <div className={newItem.type !== 'bebida' ? 'md:col-span-2' : 'md:col-span-1'}>
+            <div className={!['pizza', 'lanche', 'refeicao'].includes(newItem.type) ? 'md:col-span-1' : 'md:col-span-2'}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 {newItem.type === 'bebida' ? 'Descrição' : 'Ingredientes'}
               </label>
@@ -732,36 +882,45 @@ const MenuManagementSection: React.FC = () => {
             </div>
 
             {/* Categoria (para todos exceto bebidas) */}
-            {newItem.type !== 'bebida' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Categoria
-                </label>
-                <select
-                  value={newItem.category}
-                  onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:border-transparent"
-                  style={{
-                    borderRadius: theme.borderRadius === 'none' ? '0' :
-                                 theme.borderRadius === 'sm' ? '0.125rem' :
-                                 theme.borderRadius === 'md' ? '0.375rem' :
-                                 theme.borderRadius === 'lg' ? '0.5rem' :
-                                 theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                    fontFamily: theme.fontFamily,
-                    '--tw-ring-color': theme.primaryColor
-                  } as React.CSSProperties}
-                >
-                  {getCategoriesForType(newItem.type).map(category => (
-                    <option key={category.value} value={category.value}>
-                      {category.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Categoria
+              </label>
+              <select
+                value={newItem.category || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'add_new') {
+                    handleAddNewValue('category');
+                  } else {
+                    setNewItem({ ...newItem, category: value });
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:border-transparent"
+                style={{
+                  borderRadius: theme.borderRadius === 'none' ? '0' :
+                                theme.borderRadius === 'sm' ? '0.125rem' :
+                                theme.borderRadius === 'md' ? '0.375rem' :
+                                theme.borderRadius === 'lg' ? '0.5rem' :
+                                theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
+                  fontFamily: theme.fontFamily,
+                  '--tw-ring-color': theme.primaryColor
+                } as React.CSSProperties}
+              >
+                <option value="" disabled>Selecione uma categoria</option>
+                {combinedProductCategories.map(cat => (
+                  <option key={cat.name} value={cat.name}>
+                    {cat.label}
+                  </option>
+                ))}
+                <option value="add_new" className="font-bold text-blue-600">
+                  + Adicionar nova categoria...
+                </option>
+              </select>
+            </div>
 
             {/* Imagem URL */}
-            <div className={newItem.type !== 'bebida' ? 'md:col-span-1' : 'md:col-span-2'}>
+            <div className={!['pizza', 'lanche', 'refeicao'].includes(newItem.type) ? 'md:col-span-2' : 'md:col-span-1'}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Imagem URL
               </label>
@@ -823,7 +982,7 @@ const MenuManagementSection: React.FC = () => {
             </div>
 
             {/* Tamanhos (apenas para bebidas) */}
-            {newItem.type === 'bebida' && (
+            {!['pizza', 'lanche', 'refeicao'].includes(newItem.type) && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Tamanhos e Preços
@@ -913,7 +1072,7 @@ const MenuManagementSection: React.FC = () => {
             </button>
             <button
               onClick={handleSaveNewItem}
-              disabled={!newItem.name.trim() || (newItem.type !== 'bebida' && newItem.price <= 0) || (newItem.type === 'bebida' && newItem.sizes.every(s => !s.size.trim() || s.price <= 0))}
+              disabled={!newItem.name.trim() || (['pizza', 'lanche', 'refeicao'].includes(newItem.type) && newItem.price <= 0) || (!['pizza', 'lanche', 'refeicao'].includes(newItem.type) && newItem.sizes.every(s => !s.size.trim() || s.price <= 0))}
               className="px-4 py-2 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 backgroundColor: theme.primaryColor,
@@ -927,6 +1086,33 @@ const MenuManagementSection: React.FC = () => {
             >
               Adicionar Item
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Seção para Gerenciar Tipos e Categorias */}
+      {isManagingTypes && (
+        <div 
+          className="bg-white border border-gray-200 p-6 shadow-sm mt-6"
+          style={{
+            borderRadius: theme.borderRadius === 'none' ? '0' :
+                         theme.borderRadius === 'sm' ? '0.125rem' :
+                         theme.borderRadius === 'md' ? '0.375rem' :
+                         theme.borderRadius === 'lg' ? '0.5rem' :
+                         theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
+            fontFamily: theme.fontFamily
+          }}
+        >
+          <h3 className="text-lg font-semibold mb-4">Gerenciar Tipos e Categorias</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {renderManageableList('Tipos de Produto', productTypes, 
+              (id, name) => handleEditValue('type', id, name),
+              (id, name) => handleDeleteValue('type', id, name)
+            )}
+            {renderManageableList('Categorias de Produto', productCategories,
+              (id, name) => handleEditValue('category', id, name),
+              (id, name) => handleDeleteValue('category', id, name)
+            )}
           </div>
         </div>
       )}
@@ -1021,7 +1207,7 @@ const MenuManagementSection: React.FC = () => {
               </div>
 
               {/* Preço (para todos exceto bebidas) */}
-              {editingItem.type !== 'bebida' && (
+              {['pizza', 'lanche', 'refeicao'].includes(editingItem.type) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Preço
@@ -1047,7 +1233,7 @@ const MenuManagementSection: React.FC = () => {
               )}
 
               {/* Ingredientes/Descrição */}
-              <div className={editingItem.type !== 'bebida' ? 'md:col-span-2' : 'md:col-span-1'}>
+              <div className={!['pizza', 'lanche', 'refeicao'].includes(editingItem.type) ? 'md:col-span-1' : 'md:col-span-2'}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {editingItem.type === 'bebida' ? 'Descrição' : 'Ingredientes'}
                 </label>
@@ -1075,36 +1261,45 @@ const MenuManagementSection: React.FC = () => {
               </div>
 
               {/* Categoria (para todos exceto bebidas) */}
-              {editingItem.type !== 'bebida' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Categoria
-                  </label>
-                  <select
-                    value={editingItem.category}
-                    onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:border-transparent"
-                    style={{
-                      borderRadius: theme.borderRadius === 'none' ? '0' :
-                                   theme.borderRadius === 'sm' ? '0.125rem' :
-                                   theme.borderRadius === 'md' ? '0.375rem' :
-                                   theme.borderRadius === 'lg' ? '0.5rem' :
-                                   theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
-                      fontFamily: theme.fontFamily,
-                      '--tw-ring-color': theme.primaryColor
-                    } as React.CSSProperties}
-                  >
-                    {getCategoriesForType(editingItem.type).map(category => (
-                      <option key={category.value} value={category.value}>
-                        {category.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Categoria
+                </label>
+                <select
+                  value={editingItem.category || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'add_new') {
+                      handleAddNewValue('category');
+                    } else {
+                      setEditingItem({ ...editingItem, category: value });
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:border-transparent"
+                  style={{
+                    borderRadius: theme.borderRadius === 'none' ? '0' :
+                                  theme.borderRadius === 'sm' ? '0.125rem' :
+                                  theme.borderRadius === 'md' ? '0.375rem' :
+                                  theme.borderRadius === 'lg' ? '0.5rem' :
+                                  theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
+                    fontFamily: theme.fontFamily,
+                    '--tw-ring-color': theme.primaryColor
+                  } as React.CSSProperties}
+                >
+                  <option value="" disabled>Selecione uma categoria</option>
+                  {combinedProductCategories.map(cat => (
+                    <option key={cat.name} value={cat.name}>
+                      {cat.label}
+                    </option>
+                  ))}
+                  <option value="add_new" className="font-bold text-blue-600">
+                    + Adicionar nova categoria...
+                  </option>
+                </select>
+              </div>
 
               {/* Imagem URL */}
-              <div className={editingItem.type !== 'bebida' ? 'md:col-span-1' : 'md:col-span-2'}>
+              <div className={!['pizza', 'lanche', 'refeicao'].includes(editingItem.type) ? 'md:col-span-2' : 'md:col-span-1'}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Imagem URL
                 </label>
@@ -1166,7 +1361,7 @@ const MenuManagementSection: React.FC = () => {
               </div>
 
               {/* Tamanhos (apenas para bebidas) */}
-              {editingItem.type === 'bebida' && (
+              {!['pizza', 'lanche', 'refeicao'].includes(editingItem.type) && (
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Tamanhos e Preços
@@ -1256,7 +1451,7 @@ const MenuManagementSection: React.FC = () => {
               </button>
               <button
                 onClick={handleSaveItem}
-                disabled={!editingItem.name.trim() || (editingItem.type !== 'bebida' && editingItem.price <= 0) || (editingItem.type === 'bebida' && editingItem.sizes.every(s => !s.size.trim() || s.price <= 0))}
+                disabled={!editingItem.name.trim() || (['pizza', 'lanche', 'refeicao'].includes(editingItem.type) && editingItem.price <= 0) || (!['pizza', 'lanche', 'refeicao'].includes(editingItem.type) && editingItem.sizes.every(s => !s.size.trim() || s.price <= 0))}
                 className="px-4 py-2 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   backgroundColor: theme.primaryColor,
@@ -1276,11 +1471,13 @@ const MenuManagementSection: React.FC = () => {
       )}
 
       {/* Seções por Categoria */}
-      {renderItemSection('Pizzas Salgadas', '🍕', pizzasSalgadas, 'pizzasSalgadas', handleEditPizza, deletePizzaFlavor)}
-      {renderItemSection('Pizzas Especiais', '⭐', pizzasEspeciais, 'pizzasEspeciais', handleEditPizza, deletePizzaFlavor)}
-      {renderItemSection('Pizzas Doces', '🍰', pizzasDoces, 'pizzasDoces', handleEditPizza, deletePizzaFlavor)}
-      {renderItemSection('Lanches', '🥪', lanches, 'lanches', handleEditPizza, deletePizzaFlavor)}
-      {renderItemSection('Refeições', '🍽️', refeicoes, 'refeicoes', handleEditPizza, deletePizzaFlavor)}
+      {Array.from(menuSections.entries()).map(([category, items]) => 
+        renderItemSection(
+          category.replace(/_/g, ' '), // Formata o nome da categoria
+          '🍴', // Ícone genérico, pode ser melhorado depois
+          items, category, handleEditPizza, deletePizzaFlavor
+        )
+      )}
 
       {/* Lista de Bebidas */}
       {beverages.length > 0 && (
