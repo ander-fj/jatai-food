@@ -176,27 +176,6 @@ const CustomerOrderPage: React.FC = () => {
       firstHalf: flavorId,
       step: prev.mode === 'meia' ? 'second' : null
     }));
-
-    // Se for pizza inteira, adicionar direto ao carrinho
-    if (pizzaSelection.mode === 'inteira') {
-      const pizza = pizzaFlavors.find(p => p.id === pizzaSelection.pizzaId);
-      const flavor = pizzaFlavors.find(f => f.id === flavorId);
-      
-      if (pizza && flavor) {
-        addToCart({
-          id: pizza.id,
-          name: `Pizza Inteira ${flavor.name}`,
-          price: pizza.isPromotion && pizza.promotionPrice ? pizza.promotionPrice : pizza.price,
-          quantity: 1,
-          type: 'pizza',
-          image: pizza.image,
-          firstHalf: flavorId,
-          isHalfPizza: false
-        });
-      }
-      
-      cancelPizzaSelection();
-    }
   };
 
   const selectSecondHalf = (flavorId: string) => {
@@ -210,15 +189,17 @@ const CustomerOrderPage: React.FC = () => {
     const secondFlavor = pizzaFlavors.find(f => f.id === flavorId);
     
     if (pizza && firstFlavor && secondFlavor) {
-      // Calcular preço médio dos dois sabores
-      const firstPrice = pizza.isPromotion && pizza.promotionPrice ? pizza.promotionPrice : pizza.price;
+      // Corrigido: Calcular preço médio dos dois sabores considerando promoções individuais
+      const firstPrice = firstFlavor.isPromotion && firstFlavor.promotionPrice 
+        ? firstFlavor.promotionPrice 
+        : firstFlavor.price;
       const secondPrice = secondFlavor.isPromotion && secondFlavor.promotionPrice ? secondFlavor.promotionPrice : secondFlavor.price;
-      const averagePrice = (firstPrice + secondPrice) / 2;
+      const finalPrice = Math.max(firstPrice, secondPrice);
       
       addToCart({
         id: `${pizza.id}-half`,
         name: `Meia Pizza ${firstFlavor.name} / ${secondFlavor.name}`,
-        price: averagePrice,
+        price: finalPrice,
         quantity: 1,
         type: 'pizza',
         image: pizza.image,
@@ -254,15 +235,23 @@ const CustomerOrderPage: React.FC = () => {
     const secondPizza = pizzaFlavors.find(p => p.id === secondFlavorId);
     
     if (firstPizza && secondPizza) {
-      const averagePrice = (firstPizza.price + secondPizza.price) / 2;
+      // Corrigido: Calcular preço médio considerando promoções
+      const firstPrice = firstPizza.isPromotion && firstPizza.promotionPrice 
+        ? firstPizza.promotionPrice 
+        : firstPizza.price;
+      const secondPrice = secondPizza.isPromotion && secondPizza.promotionPrice ? secondPizza.promotionPrice : secondPizza.price;
+      const finalPrice = Math.max(firstPrice, secondPrice);
       
       addToCart({
         id: `meia-${meiaPizzaFirstFlavor}-${secondFlavorId}`,
         name: `Meia Pizza ${firstPizza.name} / ${secondPizza.name}`,
-        price: averagePrice,
+        price: finalPrice,
         quantity: 1,
         type: 'pizza',
-        image: firstPizza.image
+        image: firstPizza.image,
+        firstHalf: meiaPizzaFirstFlavor,
+        secondHalf: secondFlavorId,
+        isHalfPizza: true
       });
     }
     
@@ -273,16 +262,21 @@ const CustomerOrderPage: React.FC = () => {
   const handleInteiraDirectSelection = (pizzaId: string) => {
     const pizza = pizzaFlavors.find(p => p.id === pizzaId);
     if (pizza) {
+      const flavor = pizzaFlavors.find(f => f.id === pizzaId);
+      if (!flavor) return; // Garante que o sabor foi encontrado
       addToCart({
         id: pizza.id,
-        name: `Pizza Inteira ${pizza.name}`,
-        price: pizza.isPromotion && pizza.promotionPrice ? pizza.promotionPrice : pizza.price,
+        name: `Pizza Inteira ${flavor.name}`,
+        price: flavor.isPromotion && flavor.promotionPrice ? flavor.promotionPrice : flavor.price,
         quantity: 1,
         type: 'pizza',
-        image: pizza.image
+        image: pizza.image,
+        firstHalf: flavor.id,
+        isHalfPizza: false
       });
     }
   };
+
 
   // Função para adicionar lanche ou refeição ao carrinho
   const handleAddItem = (item: any, type: 'lanche' | 'refeicao') => {
@@ -351,11 +345,17 @@ const CustomerOrderPage: React.FC = () => {
     }
   };
 
+  const getDeliveryFeeAmount = () => {
+    const subtotal = getSubtotal();
+    if (!deliveryFee) return 0;
+    return (subtotal * deliveryFee) / 100;
+  };
+
   const getTotalPrice = () => {
     const subtotal = getSubtotal();
     const discount = getDiscount();
-    const totalWithFee = subtotal - discount + (deliveryFee || 0);
-    return Math.max(0, totalWithFee);
+    const deliveryFeeAmount = getDeliveryFeeAmount();
+    return Math.max(0, subtotal - discount + deliveryFeeAmount);
   };
 
   const applyCoupon = async () => {
@@ -449,11 +449,14 @@ const CustomerOrderPage: React.FC = () => {
       const pizzas = cart
         .filter(item => item.type === 'pizza')
         .map(item => ({
-          size: 'm',
-          firstHalf: item.id,
-          secondHalf: '',
+          id: item.isHalfPizza ? `meia-${item.firstHalf}-${item.secondHalf}` : item.id,
+          name: item.name, // Adiciona o nome da pizza
+          size: item.size || 'm', // Usa o tamanho do item ou 'm' como padrão
+          firstHalf: item.firstHalf || item.id, // Usa firstHalf se existir, senão o id
+          secondHalf: item.secondHalf || '', // Usa secondHalf se existir, senão vazio
           quantity: item.quantity,
-          isHalfPizza: false
+          isHalfPizza: item.isHalfPizza || false, // Usa isHalfPizza se existir, senão false
+          price: item.price // Adiciona o preço final do item
         }));
 
       const beverages = cart
@@ -461,7 +464,24 @@ const CustomerOrderPage: React.FC = () => {
         .map(item => ({
           id: item.id,
           size: item.size || '',
-          quantity: item.quantity
+          quantity: item.quantity,
+          price: item.price // Adiciona o preço final do item
+        }));
+
+      const lanches = cart
+        .filter(item => item.type === 'lanche')
+        .map(item => ({
+          id: item.id,
+          quantity: item.quantity,
+          price: item.price
+        }));
+
+      const refeicoes = cart
+        .filter(item => item.type === 'refeicao')
+        .map(item => ({
+          id: item.id,
+          quantity: item.quantity,
+          price: item.price
         }));
 
       const newOrder = {
@@ -470,6 +490,8 @@ const CustomerOrderPage: React.FC = () => {
         address: customerInfo.address,
         pizzas,
         beverages,
+        lanches,
+        refeicoes,
         coupon: appliedCoupon ? {
           code: appliedCoupon.code,
           discount: getDiscount()
@@ -1691,8 +1713,8 @@ const CustomerOrderPage: React.FC = () => {
                         </div>
                       )}
                       <div className="flex justify-between text-sm text-gray-600">
-                        <span>Taxa de Entrega ({deliveryFee}%):</span>
-                        <span>+ {formatCurrency(getSubtotal() * (deliveryFee / 100))}</span>
+                        <span>Taxa de Entrega:</span>
+                        <span>+ {formatCurrency(getDeliveryFeeAmount())}</span>
                       </div>
                       <div className="flex justify-between font-bold text-lg border-t pt-1">
                         <span>Total:</span>
@@ -1785,7 +1807,7 @@ const CustomerOrderPage: React.FC = () => {
                     )}
                     <div className="flex justify-between">
                       <span>Taxa de Entrega:</span>
-                      <span>{formatCurrency(deliveryFee)}</span>
+                      <span>{formatCurrency(getDeliveryFeeAmount())}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg border-t pt-1">
                       <span>Total:</span>

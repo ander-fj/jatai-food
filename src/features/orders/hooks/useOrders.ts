@@ -232,21 +232,16 @@ export const useOrders = () => {
           name = `Pizza Inteira ${firstFlavor?.name}`;
         }
         
-        const price = secondFlavor
-          ? ((firstFlavor?.price || 0) + (secondFlavor.price || 0)) / 2
-          : (firstFlavor?.price || 0);
-        
-        // Se for meia pizza, cobrar metade do preço
-        const finalPrice = pizza.isHalfPizza ? price * 0.5 : price;
-        
-        return {
-          name,
-          quantity: pizza.quantity,
-          size: sizeName || pizza.size || '',
-          isHalfPizza: pizza.isHalfPizza, // Ensure this is passed
-          price: finalPrice * pizza.quantity
-        };
-      }),
+                  // Use the price provided in newOrderData.pizzas directly
+                  const itemPrice = pizza.price; 
+                  
+                  return {
+                    name,
+                    quantity: pizza.quantity,
+                    size: sizeName || pizza.size || '',
+                    isHalfPizza: pizza.isHalfPizza, // Ensure this is passed
+                    price: itemPrice // Use the price from newOrderData.pizzas
+                  };      }),
       ...newOrderData.beverages.map(beverage => {
         if (!beverage.id) return null; // Ignorar bebidas incompletas
         const beverageItem = beverages.find(b => b.id === beverage.id);
@@ -255,9 +250,27 @@ export const useOrders = () => {
           name: beverageItem?.name || '',
           quantity: beverage.quantity,
           size: beverage.size || 'Único',
-          price: (beverageSize?.price || 0) * beverage.quantity,
+          price: beverage.price,
           image: beverageItem?.image || '', // Adicionar imagem da bebida
           type: 'beverage'
+        };
+      }),
+      ...newOrderData.lanches.map(lanche => {
+        const lancheItem = pizzaFlavors.find(f => f.id === lanche.id);
+        return {
+          name: lancheItem?.name || 'Lanche Desconhecido',
+          quantity: lanche.quantity,
+          price: lanche.price,
+          type: 'lanche'
+        };
+      }),
+      ...newOrderData.refeicoes.map(refeicao => {
+        const refeicaoItem = pizzaFlavors.find(f => f.id === refeicao.id);
+        return {
+          name: refeicaoItem?.name || 'Refeição Desconhecida',
+          quantity: refeicao.quantity,
+          price: refeicao.price,
+          type: 'refeicao'
         };
       })
     ].filter(Boolean); // Remover itens nulos (incompletos)
@@ -536,6 +549,12 @@ export const useOrders = () => {
     };
   };
 
+  const calculateFees = (currentSubtotal: number) => {
+    const calculatedDeliveryFee = currentSubtotal * (deliveryFee / 100);
+    const calculatedServiceFee = currentSubtotal * (serviceFee / 100); 
+    return { calculatedServiceFee, calculatedDeliveryFee };
+  };
+
   return {
     orders: orders, // APENAS pedidos de tenants/Beneditta Pizza/orders
     addOrder,
@@ -553,5 +572,6 @@ export const useOrders = () => {
     confirmarEntregador,
     serviceFee,
     deliveryFee,
+    calculateFees, // New function to calculate monetary fees
   };
 };
