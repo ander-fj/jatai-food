@@ -581,7 +581,10 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
                     >
                       {item.name}
                     </h4>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p 
+                      className="text-sm mt-1"
+                      style={{ color: theme.secondaryTextColor }}
+                    >
                       {item.ingredients || 'Sem descrição'}
                     </p>
                     <div className="mt-2">
@@ -1592,7 +1595,10 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
                       >
                         {beverage.name}
                       </h4>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p 
+                        className="text-sm mt-1"
+                        style={{ color: theme.secondaryTextColor }}
+                      >
                         {beverage.description || 'Sem descrição'}
                       </p>
                       <div className="mt-2 space-y-1">
