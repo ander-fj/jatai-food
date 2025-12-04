@@ -24,16 +24,16 @@ export const useRestaurantConfig = () => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           setConfig({
-            name: data.restaurantName || 'Nome não definido',
+            name: data.restaurantName || '',
             address: data.address || data.restaurantName || '',
             phone: data.phone || data.restaurantName || '',
           });
         } else {
           // Se não houver configuração específica, podemos definir um padrão ou deixar nulo
           setConfig({
-            name: 'Nome não definido',
-            address: 'Endereço não definido',
-            phone: 'Telefone não definido',
+            name: '',
+            address: '',
+            phone: '',
           });
           console.warn('Nenhuma configuração de restaurante encontrada no Firebase em "whatsappConfig".');
         }
