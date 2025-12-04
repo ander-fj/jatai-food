@@ -394,7 +394,7 @@ const AdminPage: React.FC = () => {
               <span className="text-lg font-semibold text-white mt-2">{username}</span>
             )}
         </div>
-        <nav className="flex-1 px-4 py-4 space-y-2">
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
           <a href="#" onClick={() => handleTabChange('pedidos')} className={`flex items-center px-4 py-2 rounded-md ${activeTab === 'pedidos' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>
             <Package className="mr-3" {...iconProps}/>
             {!isSidebarCollapsed && <span>Pedidos</span>}
