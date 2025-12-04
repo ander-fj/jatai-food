@@ -575,7 +575,7 @@ const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> = ({
                                    theme.fontSize === 'lg' ? '1.125rem' : '1.25rem'
                         }}
                       >
-                        <h1 className="text-2xl font-bold mb-2">Pizzaria Delícia</h1>
+                        <h1 className="text-2xl font-bold mb-2"></h1>
                         <p className="mb-2">Este é um exemplo de como o texto aparecerá no sistema.</p>
                         <p className="text-sm text-gray-600">Texto menor para descrições e detalhes.</p>
                       </div>
