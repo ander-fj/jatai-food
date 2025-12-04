@@ -683,7 +683,7 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
         <div className="flex gap-3">
           <button
             onClick={() => setShowExcelImport(true)}
-            className="flex items-center gap-2 text-white px-4 py-2 font-medium transition-colors"
+            className="flex items-center gap-2 text-black px-4 py-2 font-medium transition-colors"
             style={{
               backgroundColor: theme.secondaryColor,
               borderRadius: theme.borderRadius === 'none' ? '0' :
