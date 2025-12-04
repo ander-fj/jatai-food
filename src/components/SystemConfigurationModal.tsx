@@ -13,12 +13,12 @@ import {
   Download,
   Upload,
   DollarSign,
-  Percent,
-  Bike
+  Store,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { getTenantRef } from '../config/firebase';
 import { onValue, set } from 'firebase/database';
+import { useAuth } from '../hooks/useAuth';
 
 interface SystemConfigurationModalProps {
   isOpen: boolean;
@@ -30,43 +30,36 @@ const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> = ({
   onClose
 }) => {
   const { theme, updateTheme, resetTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'colors' | 'typography' | 'layout' | 'fees' | 'animations'>('colors');
+  const { storeName, storeAddress, storePhone, updateStoreInfo } = useAuth();
+  const [activeTab, setActiveTab] = useState<'colors' | 'typography' | 'layout' | 'icons' | 'animations'>('colors');
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
 
   // Estados para as taxas
   const [serviceFee, setServiceFee] = useState<number>(0);
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
+  const [storeSettings, setStoreSettings] = useState({
+    name: '',
+    address: '',
+    phone: ''
+  });
 
   // Carregar e salvar taxas no Firebase
   useEffect(() => {
     if (!isOpen) return;
 
-    const feesConfigRef = getTenantRef('config/fees');
-    const unsubscribe = onValue(feesConfigRef, (snapshot) => {
+    // Unifica a leitura de configurações da loja e taxas
+    const storeConfigRef = getTenantRef('config/store');
+    const unsubscribe = onValue(storeConfigRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         setServiceFee(data.serviceFee || 0);
         setDeliveryFee(data.deliveryFee || 0);
+        // Os outros dados da loja já são sincronizados pelo outro useEffect
       }
     });
 
     return () => unsubscribe();
   }, [isOpen]);
-
-  const saveFeesConfig = async () => {
-    const feesConfigRef = getTenantRef('config/fees');
-    const fees = {
-      serviceFee: Number(serviceFee) || 0,
-      deliveryFee: Number(deliveryFee) || 0,
-    };
-    await set(feesConfigRef, {
-      ...fees,
-      updatedAt: new Date().toISOString()
-    });
-    localStorage.setItem('app-fees', JSON.stringify(fees));
-    window.dispatchEvent(new Event('fees-updated'));
-    console.log('💰 Saved fees to Firebase and localStorage');
-  };
 
   const colorPresets = [
     { name: 'Pizzaria Clássica', primary: '#DC2626', secondary: '#EA580C', accent: '#059669' },
@@ -141,16 +134,20 @@ const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> = ({
     }
   };
 
-  const handleSave = () => {
-    saveFeesConfig();
-    // Forçar re-aplicação do tema
-    setTimeout(() => {
-      const event = new CustomEvent('themeChanged', { detail: theme });
-      window.dispatchEvent(event);
-    }, 100);
-    
-    alert('Configurações salvas com sucesso!');
-    onClose();
+  const handleSave = async () => {    
+    try {
+      // Forçar re-aplicação do tema
+      setTimeout(() => {
+        const event = new CustomEvent('themeChanged', { detail: theme });
+        window.dispatchEvent(event);
+      }, 100);
+      
+      alert('Configurações salvas com sucesso!');
+      onClose();
+    } catch (error) {
+      alert('Ocorreu um erro ao salvar as configurações. Tente novamente.');
+      console.error("Erro em handleSave:", error);
+    }
   };
 
   if (!isOpen) return null;
@@ -167,7 +164,7 @@ const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> = ({
               </div>
               <div>
                 <h2 className="text-2xl font-bold">Configuração do Sistema</h2>
-                <p className="text-blue-100">Personalize a aparência da sua pizzaria</p>
+                <p className="text-blue-100">Personalize a sua aparência</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -203,9 +200,8 @@ const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> = ({
                 { id: 'colors', label: 'Cores', icon: Palette },
                 { id: 'typography', label: 'Tipografia', icon: Type },
                 { id: 'layout', label: 'Layout', icon: Layout },
-                { id: 'fees', label: 'Taxas', icon: DollarSign },
                 { id: 'icons', label: 'Ícones', icon: Monitor },
-                { id: 'animations', label: 'Animações', icon: Zap }
+                { id: 'animations', label: 'Animações', icon: Zap },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -687,65 +683,6 @@ const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> = ({
                           <option value="rounded">Arredondado</option>
                         </select>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Fees Tab */}
-              {activeTab === 'fees' && (
-                <div className="space-y-8">
-                  <div>
-                    <h3 className="text-xl font-semibold mb-4">Taxas e Entregas</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Taxa de Serviço */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Taxa de Serviço (%)
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            value={serviceFee}
-                            onChange={(e) => setServiceFee(parseFloat(e.target.value) || 0)}
-                            className="w-full pl-4 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="Ex: 10"
-                            min="0"
-                            max="100"
-                          />
-                          <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">Taxa percentual aplicada sobre o valor total do pedido para consumo no local.</p>
-                      </div>
-
-                      {/* Taxa de Entrega */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Taxa de Entrega (%)
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={deliveryFee}
-                            onChange={(e) => setDeliveryFee(parseFloat(e.target.value) || 0)}
-                            className="w-full pl-4 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            placeholder="Ex: 5"
-                          />
-                          <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">Taxa percentual aplicada sobre o valor total do pedido para entregas.</p>
-                      </div>
-                    </div>
-                    <div className="mt-6 flex justify-end">
-                      <button
-                        onClick={saveFeesConfig}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-                      >
-                        <Save className="h-4 w-4" />
-                        Salvar Taxas
-                      </button>
                     </div>
                   </div>
                 </div>

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { MapPin, Settings, ShoppingCart } from 'lucide-react';
+import { MapPin, Settings, ShoppingCart, Pizza, User } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import LoginModal from './LoginModal';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
+import { useRestaurantConfig } from '../hooks/useRestaurantConfig'; // Importar o hook de configuração
 
 const Header: React.FC = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const { storeName, storeAddress, storePhone, isLoggedIn, username, isAuthenticated } = useAuth();
+  const { isLoggedIn, username, isAuthenticated } = useAuth();
+  const { restaurantName, welcomeMessage } = useRestaurantConfig(); // Usar o hook para obter o nome do restaurante
   const { theme, iconProps } = useTheme();
   const location = useLocation();
   const isAdminPage = location.pathname.includes('/admin');
@@ -25,58 +27,55 @@ const Header: React.FC = () => {
       <header 
         className="text-white py-3 px-4 theme-header"
         style={{
+          fontFamily: theme.fontFamily,
           background: theme.headerStyle === 'gradient' 
             ? `linear-gradient(to right, ${theme.primaryColor}, ${theme.secondaryColor})`
             : theme.primaryColor
         }}
       >
         <div className="container mx-auto flex justify-between items-center">
+          {/* Logo */}
           <Link 
             to="/" 
-            className="flex items-center gap-2 hover:bg-black hover:bg-opacity-20 px-3 py-2 rounded-md transition-colors"
-            style={{ fontFamily: theme.fontFamily }}
+            className="flex items-center gap-4 hover:bg-black hover:bg-opacity-20 px-3 py-2 rounded-md transition-colors"
           >
-            {theme.systemIcon ? (
-              <img 
-                src={theme.systemIcon} 
-                alt="Logo" 
-                className="h-6 w-6 system-icon"
-                onError={(e) => {
-                  // Fallback para ícone padrão se a imagem falhar
-                  (e.target as HTMLImageElement).style.display = 'none';
-                  const fallbackIcon = document.createElement('div');
-                  fallbackIcon.innerHTML = '<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>';
-                  (e.target as HTMLImageElement).parentNode?.insertBefore(fallbackIcon, e.target);
-                }}
-              />
-            ) : (
-              <MapPin className="h-6 w-6" {...iconProps}/>
-            )}
-            {isAdminPage && (
-              <h1 className="text-xl font-bold">{storeName || 'Sua Pizzaria'}</h1>
-            )}
+            <div className="flex flex-col items-center text-center">
+              {theme.systemIcon ? (
+                <img 
+                  src={theme.systemIcon} 
+                  alt="Logo" 
+                  className="h-16 w-16 rounded-full object-cover"
+                />
+              ) : (
+                <Pizza className="h-12 w-12" {...iconProps}/>
+              )}
+              {welcomeMessage && (
+                <span className="text-xs mt-1 text-white opacity-90">{welcomeMessage}</span>
+              )}
+            </div>
           </Link>
+
+          {/* Nome do Restaurante - Centralizado */}
+          <div className="flex-grow text-center">
+            <span className="text-5xl font-bold text-white">{restaurantName}</span>
+          </div>
+
+          {/* Botões e Informações do Usuário */}
           <div className="flex items-center gap-4">
-            {isAdminPage && (
-              <div className="text-right text-sm" style={{ fontFamily: theme.fontFamily }}>
-                <p>{storeAddress}</p>
-                <p>{storePhone}</p>
-              </div>
-            )}
+            
             {!isAdminPage && (
               <button 
                 onClick={() => setShowLoginModal(true)}
                 className="flex items-center gap-2 bg-black bg-opacity-20 hover:bg-opacity-30 px-3 py-2 rounded-md transition-colors"
-                style={{ fontFamily: theme.fontFamily }}
               >
                 <Settings className="h-5 w-5" {...iconProps}/>
-                <span className="hidden sm:inline"></span>
               </button>
             )}
-            {isAdminPage && isLoggedIn && (
-              <div className="text-xs text-white text-opacity-80" style={{ fontFamily: theme.fontFamily }}>
-                Logado como: {username}
-              </div>
+            
+            {isAdminPage && (
+              <Link to="/admin" className="flex items-center gap-2 bg-black bg-opacity-20 hover:bg-opacity-30 px-3 py-2 rounded-md transition-colors">
+                  <Settings className="h-5 w-5" {...iconProps}/>
+              </Link>
             )}
           </div>
         </div>

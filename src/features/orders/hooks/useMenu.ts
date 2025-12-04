@@ -9,6 +9,7 @@ interface PizzaFlavor {
   image?: string;
   ingredients?: string;
   category?: string;
+  type?: string; // Adicionado para identificar o tipo do item (pizza, lanche, etc.)
   isPromotion?: boolean;
   promotionPrice?: number;
 }
@@ -27,282 +28,114 @@ interface Beverage {
 }
 
 export const useMenu = () => {
-  const [pizzaFlavors, setPizzaFlavors] = useState<PizzaFlavor[]>([
-    { 
-      id: '1', 
-      name: 'Margherita', 
-      price: 45.90,
-      ingredients: 'Molho de tomate, mussarela, manjericão fresco e azeite extravirgem',
-      category: 'salgada'
-    },
-    { 
-      id: '2', 
-      name: 'Pepperoni', 
-      price: 47.90,
-      ingredients: 'Molho de tomate, mussarela e fatias generosas de pepperoni',
-      category: 'salgada'
-    },
-    { 
-      id: '3', 
-      name: 'Portuguesa', 
-      price: 47.90,
-      ingredients: 'Molho de tomate, mussarela, presunto, ovos, cebola, azeitona e orégano',
-      category: 'salgada'
-    },
-    { 
-      id: '4', 
-      name: '4 Queijos', 
-      price: 49.90,
-      ingredients: 'Molho branco, mussarela, provolone, parmesão e gorgonzola',
-      category: 'especial'
-    },
-    { 
-      id: '5', 
-      name: 'Calabresa', 
-      price: 46.90,
-      ingredients: 'Molho de tomate, mussarela, calabresa fatiada e cebola',
-      category: 'salgada'
-    },
-    { 
-      id: '6', 
-      name: 'Frango Catupiry', 
-      price: 47.90,
-      ingredients: 'Molho de tomate, mussarela, frango desfiado e catupiry original',
-      category: 'salgada'
-    }
-  ]);
+  const [pizzaFlavors, setPizzaFlavors] = useState<PizzaFlavor[]>([]);
+  const [beverages, setBeverages] = useState<Beverage[]>([]);
 
-  const [beverages, setBeverages] = useState<Beverage[]>([
-    { 
-      id: '1', 
-      name: 'Coca-Cola', 
-      description: 'O refrigerante mais famoso do mundo, sempre gelado e refrescante',
-      sizes: [
-        { size: '350ml', price: 5.90 },
-        { size: '600ml', price: 8.90 },
-        { size: '1L', price: 10.90 },
-        { size: '2L', price: 12.90 }
-      ]
-    },
-    { 
-      id: '2', 
-      name: 'Guaraná', 
-      description: 'Sabor brasileiro autêntico, refrescante e natural',
-      sizes: [
-        { size: '350ml', price: 5.90 },
-        { size: '600ml', price: 8.90 },
-        { size: '1L', price: 10.90 },
-        { size: '2L', price: 11.90 }
-      ]
-    },
-    { 
-      id: '3', 
-      name: 'Água Mineral', 
-      description: 'Água pura e cristalina para sua hidratação',
-      sizes: [
-        { size: '500ml', price: 3.90 }
-      ]
-    }
-  ]);
-
-  // Carregar sabores de pizza do Firebase quando o componente inicializar
   useEffect(() => {
-    const loadPizzaFlavors = () => {
     try {
-      console.log('🔄 Carregando sabores de pizza do Firebase...');
-      const pizzaFlavorsRef = getTenantRef('menu/pizzaFlavors');
-      
-      const unsubscribe = onValue(pizzaFlavorsRef, (snapshot) => {
+      console.log('🔄 Carregando dados do cardápio do Firebase...');
+
+      // Listener único para a pasta 'menu'
+      const menuRef = getTenantRef('menu');
+      const unsubscribeMenu = onValue(menuRef, (snapshot) => {
         const data = snapshot.val();
+        const loadedPizzas: PizzaFlavor[] = []; // Usado para todos os itens de preço único
+        const loadedBeverages: Beverage[] = [];
+
         if (data) {
-          const flavorsList = Object.entries(data).map(([id, flavor]: any) => ({
-            id,
-            ...flavor,
-          }));
-          console.log('✅ Sabores carregados do Firebase:', flavorsList.length, flavorsList);
-          setPizzaFlavors(flavorsList);
-        } else {
-          console.log('📝 Nenhum sabor personalizado encontrado, usando sabores padrão');
-          // Salvar sabores padrão no Firebase na primeira vez
-          saveDefaultFlavorsToFirebase();
-        }
-      });
-
-      return () => unsubscribe();
-    } catch (error) {
-      console.error('❌ Erro ao carregar sabores (usuário não autenticado):', error);
-      // Manter sabores padrão se não conseguir acessar Firebase
-    }
-    };
-
-    // Carregar inicialmente
-    const cleanup = loadPizzaFlavors();
-
-    // Listener para forçar refresh
-    const handleForceRefresh = () => {
-      console.log('🔄 Forçando refresh dos sabores de pizza...');
-      if (cleanup) cleanup();
-      setTimeout(loadPizzaFlavors, 100);
-    };
-
-    window.addEventListener('forceMenuRefresh', handleForceRefresh);
-
-    return () => {
-      if (cleanup) cleanup();
-      window.removeEventListener('forceMenuRefresh', handleForceRefresh);
-    };
-  }, []);
-
-  // Carregar bebidas do Firebase quando o componente inicializar
-  useEffect(() => {
-    const loadBeverages = () => {
-    try {
-      console.log('🔄 Carregando bebidas do Firebase...');
-      const beveragesRef = getTenantRef('menu/beverages');
-      
-      const unsubscribe = onValue(beveragesRef, (snapshot) => {
-        const data = snapshot.val();
-        console.log('🔍 Dados brutos do Firebase (beverages):', data);
-        if (data) {
-          const beveragesList = Object.entries(data).map(([id, beverage]: any) => ({
-            id,
-            ...beverage,
-          }));
-          console.log('✅ Bebidas carregadas do Firebase:', beveragesList.length);
-          console.log('📋 Lista completa de bebidas:', beveragesList);
-          beveragesList.forEach(beverage => {
-            console.log(`  - ${beverage.name}: ${beverage.sizes?.length || 0} tamanhos | Imagem: ${beverage.image || 'SEM IMAGEM'}`);
+          // Iterar sobre todas as subcoleções dentro de 'menu'
+          Object.entries(data).forEach(([collectionName, collectionData]: [string, any]) => {
+            if (collectionData) {
+              Object.entries(collectionData).forEach(([id, itemData]: [string, any]) => {
+                // Determinar o tipo do item com base na estrutura
+                if (itemData.sizes && Array.isArray(itemData.sizes)) {
+                  // É uma bebida
+                  loadedBeverages.push({ id, ...itemData });
+                } else {
+                  // É um item de preço único (pizza, lanche, refeicao, aromatizante, etc.)
+                  loadedPizzas.push({ id, ...itemData });
+                }
+              });
+            }
           });
-          setBeverages(beveragesList);
+          console.log('✅ Itens do cardápio carregados do Firebase.');
+          setPizzaFlavors(loadedPizzas);
+          setBeverages(loadedBeverages);
         } else {
-          console.log('📝 Nenhuma bebida personalizada encontrada, usando bebidas padrão');
-          // Salvar bebidas padrão no Firebase na primeira vez
-          saveDefaultBeveragesToFirebase();
+          console.log('📝 Nenhum item encontrado no Firebase.');
+          setPizzaFlavors([]);
+          setBeverages([]);
         }
       });
-
-      return () => unsubscribe();
+      
+      // Função de limpeza para desinscrever dos listeners
+      return () => {
+        unsubscribeMenu();
+      };
     } catch (error) {
-      console.error('❌ Erro ao carregar bebidas (usuário não autenticado):', error);
-      // Manter bebidas padrão se não conseguir acessar Firebase
-    }
-    };
-
-    // Carregar inicialmente
-    const cleanup = loadBeverages();
-
-    // Listener para forçar refresh
-    const handleForceRefresh = () => {
-      console.log('🔄 Forçando refresh das bebidas...');
-      if (cleanup) cleanup();
-      setTimeout(loadBeverages, 100);
-    };
-
-    window.addEventListener('forceMenuRefresh', handleForceRefresh);
-
-    return () => {
-      if (cleanup) cleanup();
-      window.removeEventListener('forceMenuRefresh', handleForceRefresh);
+      console.error('❌ Erro ao configurar listeners do menu:', error);
     };
   }, []);
 
-  // Função para salvar sabores padrão no Firebase
-  const saveDefaultFlavorsToFirebase = async () => {
-    try {
-      console.log('💾 Salvando sabores padrão no Firebase...');
-      const pizzaFlavorsRef = getTenantRef('menu/pizzaFlavors');
-      
-      // Converter array para objeto com IDs como chaves
-      const flavorsObject: { [key: string]: Omit<PizzaFlavor, 'id'> } = {};
-      pizzaFlavors.forEach(flavor => {
-        flavorsObject[flavor.id] = {
-          name: flavor.name,
-          price: flavor.price
-        };
-      });
-      
-      await set(pizzaFlavorsRef, flavorsObject);
-      console.log('✅ Sabores padrão salvos no Firebase');
-    } catch (error) {
-      console.error('❌ Erro ao salvar sabores padrão:', error);
-    }
-  };
-
-  // Função para salvar bebidas padrão no Firebase
-  const saveDefaultBeveragesToFirebase = async () => {
-    try {
-      console.log('💾 Salvando bebidas padrão no Firebase...');
-      const beveragesRef = getTenantRef('menu/beverages');
-      
-      // Converter array para objeto com IDs como chaves
-      const beveragesObject: { [key: string]: Omit<Beverage, 'id'> } = {};
-      beverages.forEach(beverage => {
-        beveragesObject[beverage.id] = {
-          name: beverage.name,
-          sizes: beverage.sizes
-        };
-      });
-      
-      await set(beveragesRef, beveragesObject);
-      console.log('✅ Bebidas padrão salvas no Firebase');
-    } catch (error) {
-      console.error('❌ Erro ao salvar bebidas padrão:', error);
-    }
-  };
-
-  const addPizzaFlavor = async (flavor: { 
+  // Modificado para aceitar o 'type' do item e salvar na coleção correta
+  const addPizzaFlavor = async (flavor: {
     name: string; 
     price: number; 
     image?: string; 
     ingredients?: string;
     category?: string;
+    type: string; // O tipo agora é obrigatório
     isPromotion?: boolean;
     promotionPrice?: number;
   }) => {
     try {
-      console.log('🍕 Adicionando novo sabor de pizza:', flavor);
+      const itemType = flavor.type || 'pizza'; // Usa o tipo passado ou 'pizza' como padrão
+      const collectionName = `${itemType}Flavors`; // Ex: 'pizzaFlavors', 'lancheFlavors'
+      console.log(`🍕 Adicionando novo item (${itemType}):`, flavor);
       
       // Gerar novo ID único baseado em timestamp
-      const newId = `pizza_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newId = `${itemType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const newFlavor: PizzaFlavor = {
         id: newId,
         ...flavor,
         image: flavor.image || '',
         ingredients: flavor.ingredients || '',
         category: flavor.category || 'salgada',
+        type: itemType, // Salva o tipo junto com o item
         isPromotion: flavor.isPromotion || false,
         promotionPrice: flavor.promotionPrice || 0
       };
 
       // Salvar no Firebase
-      const pizzaFlavorRef = getTenantRef(`menu/pizzaFlavors/${newId}`);
-      await set(pizzaFlavorRef, {
+      const itemRef = getTenantRef(`menu/${collectionName}/${newId}`);
+      await set(itemRef, {
         name: flavor.name,
         price: flavor.price,
         image: flavor.image || '',
         ingredients: flavor.ingredients || '',
         category: flavor.category || 'salgada',
         isPromotion: flavor.isPromotion || false,
-        promotionPrice: flavor.promotionPrice || 0
+        promotionPrice: flavor.promotionPrice || 0,
+        type: itemType // Garante que o tipo seja salvo no Firebase
       });
 
-      // Atualizar estado local imediatamente
-      setPizzaFlavors(prev => [...prev, newFlavor]);
+      // A atualização do estado local será feita pelo listener do useEffect
+      // setPizzaFlavors(prev => [...prev, newFlavor]);
       
-      console.log('✅ Novo sabor adicionado com sucesso:', newFlavor);
+      console.log('✅ Novo item adicionado com sucesso:', newFlavor);
       
       // Forçar re-render em todos os componentes que usam o menu
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('menuUpdated', { 
-          detail: { type: 'pizza', action: 'added', item: newFlavor } 
+          detail: { type: itemType, action: 'added', item: newFlavor } 
         }));
       }, 100);
     } catch (error) {
-      console.error('❌ Erro ao adicionar sabor:', error);
+      console.error('❌ Erro ao adicionar item:', error);
       
-      // Fallback: adicionar apenas localmente se Firebase falhar
+      // Fallback: adicionar apenas localmente se Firebase falhar (considerar remover este fallback para consistência)
       const newFlavor: PizzaFlavor = {
-        id: `pizza_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `${flavor.type || 'item'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         ...flavor,
         image: flavor.image || ''
       };
@@ -317,10 +150,12 @@ export const useMenu = () => {
     description?: string;
   }) => {
     try {
+      const itemType = 'bebida';
+      const collectionName = `${itemType}Flavors`;
       console.log('🥤 Adicionando nova bebida:', beverage);
       
       // Gerar novo ID único baseado em timestamp
-      const newId = `beverage_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newId = `${itemType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const newBeverage: Beverage = {
         id: newId,
         ...beverage,
@@ -329,23 +164,24 @@ export const useMenu = () => {
       };
 
       // Salvar no Firebase
-      const beverageRef = getTenantRef(`menu/beverages/${newId}`);
-      await set(beverageRef, {
+      const itemRef = getTenantRef(`menu/${collectionName}/${newId}`);
+      await set(itemRef, {
         name: beverage.name,
         sizes: beverage.sizes,
         image: beverage.image || '',
-        description: beverage.description || ''
+        description: beverage.description || '',
+        type: itemType // Garante que o tipo seja salvo no Firebase
       });
 
-      // Atualizar estado local imediatamente
-      setBeverages(prev => [...prev, newBeverage]);
+      // A atualização do estado local será feita pelo listener do useEffect
+      // setBeverages(prev => [...prev, newBeverage]);
       
       console.log('✅ Nova bebida adicionada com sucesso:', newBeverage);
       
       // Forçar re-render em todos os componentes que usam o menu
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('menuUpdated', { 
-          detail: { type: 'beverage', action: 'added', item: newBeverage } 
+          detail: { type: itemType, action: 'added', item: newBeverage } 
         }));
       }, 100);
     } catch (error) {
@@ -353,7 +189,7 @@ export const useMenu = () => {
       
       // Fallback: adicionar apenas localmente se Firebase falhar
       const newBeverage: Beverage = {
-        id: `beverage_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `bebida_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         ...beverage,
         image: beverage.image || ''
       };
@@ -361,40 +197,45 @@ export const useMenu = () => {
     }
   };
 
-  const updatePizzaFlavor = async (id: string, updatedFlavor: { 
+  // Modificado para aceitar o 'type' do item e atualizar na coleção correta
+  const updatePizzaFlavor = async (id: string, updatedFlavor: {
     name: string; 
     price: number; 
     image?: string; 
     ingredients?: string;
     category?: string;
+    type: string; // O tipo agora é obrigatório
     isPromotion?: boolean;
     promotionPrice?: number;
   }) => {
     try {
-      console.log('🍕 Atualizando sabor de pizza:', id, updatedFlavor);
+      const itemType = updatedFlavor.type || 'pizza';
+      const collectionName = `${itemType}Flavors`;
+      console.log(`🍕 Atualizando item (${itemType}):`, id, updatedFlavor);
       
       // Atualizar no Firebase
-      const pizzaFlavorRef = getTenantRef(`menu/pizzaFlavors/${id}`);
-      await set(pizzaFlavorRef, {
+      const itemRef = getTenantRef(`menu/${collectionName}/${id}`);
+      await set(itemRef, {
         name: updatedFlavor.name,
         price: updatedFlavor.price,
         image: updatedFlavor.image || '',
         ingredients: updatedFlavor.ingredients || '',
         category: updatedFlavor.category || 'salgada',
         isPromotion: updatedFlavor.isPromotion || false,
-        promotionPrice: updatedFlavor.promotionPrice || 0
+        promotionPrice: updatedFlavor.promotionPrice || 0,
+        type: itemType // Garante que o tipo seja salvo no Firebase
       });
 
-      // Atualizar estado local
-      setPizzaFlavors(prev => prev.map(flavor => 
-        flavor.id === id 
-          ? { ...flavor, ...updatedFlavor }
-          : flavor
-      ));
+      // A atualização do estado local será feita pelo listener do useEffect
+      // setPizzaFlavors(prev => prev.map(flavor => 
+      //   flavor.id === id 
+      //     ? { ...flavor, ...updatedFlavor }
+      //     : flavor
+      // ));
       
-      console.log('✅ Sabor atualizado com sucesso');
+      console.log('✅ Item atualizado com sucesso');
     } catch (error) {
-      console.error('❌ Erro ao atualizar sabor:', error);
+      console.error('❌ Erro ao atualizar item:', error);
       
       // Fallback: atualizar apenas localmente se Firebase falhar
       setPizzaFlavors(prev => prev.map(flavor => 
@@ -405,20 +246,22 @@ export const useMenu = () => {
     }
   };
 
-  const deletePizzaFlavor = async (id: string) => {
+  // Modificado para aceitar o 'type' do item e excluir da coleção correta
+  const deletePizzaFlavor = async (id: string, itemType: string) => { // Adicionado itemType
     try {
-      console.log('🍕 Excluindo sabor de pizza:', id);
+      const collectionName = `${itemType}Flavors`;
+      console.log(`🍕 Excluindo item (${itemType}):`, id);
       
       // Excluir do Firebase
-      const pizzaFlavorRef = getTenantRef(`menu/pizzaFlavors/${id}`);
-      await set(pizzaFlavorRef, null);
+      const itemRef = getTenantRef(`menu/${collectionName}/${id}`);
+      await set(itemRef, null);
 
-      // Atualizar estado local
-      setPizzaFlavors(prev => prev.filter(flavor => flavor.id !== id));
+      // A atualização do estado local será feita pelo listener do useEffect
+      // setPizzaFlavors(prev => prev.filter(flavor => flavor.id !== id));
       
-      console.log('✅ Sabor excluído com sucesso');
+      console.log('✅ Item excluído com sucesso');
     } catch (error) {
-      console.error('❌ Erro ao excluir sabor:', error);
+      console.error('❌ Erro ao excluir item:', error);
       
       // Fallback: excluir apenas localmente se Firebase falhar
       setPizzaFlavors(prev => prev.filter(flavor => flavor.id !== id));
@@ -427,14 +270,16 @@ export const useMenu = () => {
 
   const deleteBeverage = async (id: string) => {
     try {
+      const itemType = 'bebida';
+      const collectionName = `${itemType}Flavors`;
       console.log('🥤 Excluindo bebida:', id);
       
       // Excluir do Firebase
-      const beverageRef = getTenantRef(`menu/beverages/${id}`);
-      await set(beverageRef, null);
+      const itemRef = getTenantRef(`menu/${collectionName}/${id}`);
+      await set(itemRef, null);
 
-      // Atualizar estado local
-      setBeverages(prev => prev.filter(beverage => beverage.id !== id));
+      // A atualização do estado local será feita pelo listener do useEffect
+      // setBeverages(prev => prev.filter(beverage => beverage.id !== id));
       
       console.log('✅ Bebida excluída com sucesso');
     } catch (error) {
@@ -452,23 +297,26 @@ export const useMenu = () => {
     description?: string;
   }) => {
     try {
+      const itemType = 'bebida';
+      const collectionName = `${itemType}Flavors`;
       console.log('🥤 Atualizando bebida:', id, updatedBeverage);
       
       // Atualizar no Firebase
-      const beverageRef = getTenantRef(`menu/beverages/${id}`);
-      await set(beverageRef, {
+      const itemRef = getTenantRef(`menu/${collectionName}/${id}`);
+      await set(itemRef, {
         name: updatedBeverage.name,
         sizes: updatedBeverage.sizes,
         image: updatedBeverage.image || '',
-        description: updatedBeverage.description || ''
+        description: updatedBeverage.description || '',
+        type: itemType // Garante que o tipo seja salvo no Firebase
       });
 
-      // Atualizar estado local
-      setBeverages(prev => prev.map(beverage => 
-        beverage.id === id 
-          ? { ...beverage, ...updatedBeverage }
-          : beverage
-      ));
+      // A atualização do estado local será feita pelo listener do useEffect
+      // setBeverages(prev => prev.map(beverage => 
+      //   beverage.id === id 
+      //     ? { ...beverage, ...updatedBeverage }
+      //     : beverage
+      // ));
       
       console.log('✅ Bebida atualizada com sucesso');
     } catch (error) {
@@ -483,13 +331,13 @@ export const useMenu = () => {
     }
   };
   return {
-    pizzaFlavors,
+    pizzaFlavors, // Agora contém todos os itens de preço único (pizzas, lanches, etc.)
     beverages,
-    addPizzaFlavor,
+    addPizzaFlavor, // Agora aceita um parâmetro 'type'
     addBeverage,
-    updatePizzaFlavor,
+    updatePizzaFlavor, // Agora aceita um parâmetro 'type'
     updateBeverage,
-    deletePizzaFlavor,
+    deletePizzaFlavor, // Agora aceita um parâmetro 'itemType'
     deleteBeverage
   };
 };

@@ -13,16 +13,14 @@ const Footer: React.FC = () => {
   return (
     <footer className="bg-gray-800 text-white py-4 px-4">
       <div className="container mx-auto flex flex-col md:flex-row justify-between items-center">
-        <div className="flex items-center gap-2 mb-2 md:mb-0"> <Pizza className="h-5 w-5" {...iconProps}/>
-          <h2 className="text-lg font-bold">{storeName || 'Sua Pizzaria'}</h2>
-        </div>
+        {storeName && <h2 className="text-lg font-bold mb-2 md:mb-0">{storeName}</h2>}
         <div className="text-center md:text-right text-sm">
-          <p>{storeAddress}</p>
-           <p>{storePhone}</p>
+          {storeAddress && <p>{storeAddress}</p>}
+          {storePhone && <p>{storePhone}</p>}
         </div>
       </div>
       <div className="container mx-auto mt-4 text-center text-xs text-gray-400">
-        <p>© 2025 {storeName || 'Sua Pizzaria'}. Todos os direitos reservados.</p>
+        <p>© 2025 {storeName || 'Secontaf'}. Todos os direitos reservados.</p>
       </div>
     </footer>
   );

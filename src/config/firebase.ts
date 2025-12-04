@@ -94,40 +94,7 @@ export const initializeTenant = async (tenantId: string) => {
       equipe: {},
       routes: {},
       menu: {
-        pizzaFlavors: {
-          '1': { name: 'Margherita', price: 45.90 },
-          '2': { name: 'Pepperoni', price: 47.90 },
-          '3': { name: 'Portuguesa', price: 47.90 },
-          '4': { name: '4 Queijos', price: 49.90 },
-          '5': { name: 'Calabresa', price: 46.90 },
-          '6': { name: 'Frango Catupiry', price: 47.90 }
-        },
-        beverages: {
-          '1': { 
-            name: 'Coca-Cola', 
-            sizes: [
-              { size: '350ml', price: 5.90 },
-              { size: '600ml', price: 8.90 },
-              { size: '1L', price: 10.90 },
-              { size: '2L', price: 12.90 }
-            ]
-          },
-          '2': { 
-            name: 'Guaraná', 
-            sizes: [
-              { size: '350ml', price: 5.90 },
-              { size: '600ml', price: 8.90 },
-              { size: '1L', price: 10.90 },
-              { size: '2L', price: 11.90 }
-            ]
-          },
-          '3': { 
-            name: 'Água Mineral', 
-            sizes: [
-              { size: '500ml', price: 3.90 }
-            ]
-          }
-        }
+        
       },
       analytics: {
         createdAt: new Date().toISOString()

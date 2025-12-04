@@ -124,7 +124,8 @@ const GoogleSheetsImport: React.FC<GoogleSheetsImportProps> = ({ onClose }) => {
             price: parseFloat(preco) || 0,
             image: imagemUrl || '',
             ingredients: descricao || '',
-            category: categoria || 'salgada'
+            category: categoria || 'salgada',
+            type: tipo.toLowerCase() // Passa o tipo do item
           });
           pizzasAdded++;
         } else if (tipo.toLowerCase() === 'bebida') {

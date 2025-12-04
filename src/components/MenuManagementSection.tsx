@@ -16,6 +16,7 @@ interface PizzaFlavor {
   image?: string;
   ingredients?: string;
   category?: string;
+  type?: string; // Adicionado para identificar o tipo do item
   isPromotion?: boolean;
   promotionPrice?: number;
 }
@@ -74,6 +75,7 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
   const [isManagingTypes, setIsManagingTypes] = useState(false);
   const [newItemType, setNewItemType] = useState<'pizza' | 'bebida' | 'lanche' | 'refeicao'>('pizza');
   const [showNewItemForm, setShowNewItemForm] = useState(false);
+  const [showClearMenuConfirm, setShowClearMenuConfirm] = useState(false);
 
   // Estados para controlar seções recolhidas
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -113,6 +115,7 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
       unsubscribeCategories();
     };
   }, []);
+
 
   const handleAddNewValue = async (entity: 'type' | 'category') => {
     const entityName = entity === 'type' ? 'tipo' : 'categoria';
@@ -155,6 +158,22 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
       alert(`${entityName} excluído com sucesso!`);
     }
   };
+
+  const handleClearMenu = async () => {
+    try {
+      // Apaga o nó 'menu' inteiro, limpando todos os itens (pizzas, bebidas, etc.)
+      const menuRef = getTenantRef('menu');
+      await set(menuRef, null);
+
+      alert('✅ Cardápio limpo com sucesso!');
+    } catch (error) {
+      console.error('❌ Erro ao limpar o cardápio:', error);
+      alert('Ocorreu um erro ao limpar o cardápio. Tente novamente.');
+    } finally {
+      setShowClearMenuConfirm(false);
+    }
+  };
+
 
   const renderManageableList = (
     title: string,
@@ -253,7 +272,7 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
       price: pizza.price,
       image: pizza.image || '',
       ingredients: pizza.ingredients || '',
-      category: pizza.category || 'salgada',
+      category: pizza.category || getDefaultCategory(pizza.type || 'pizza'),
       sizes: [],
       description: ''
     });
@@ -296,7 +315,8 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
             price: editingItem.price,
             image: editingItem.image,
             ingredients: editingItem.ingredients,
-            category: editingItem.category
+            category: editingItem.category,
+            type: editingItem.type // Passa o tipo do item
           });
         }
       } else {
@@ -337,27 +357,29 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
 
   const handleSaveNewItem = async () => {
     try {
-      let itemData: any = {
-        name: newItem.name,
-        type: newItem.type,
-        category: newItem.category,
-        image: newItem.image,
-      };
-
-      if (['pizza', 'lanche', 'refeicao'].includes(newItem.type)) {
-        itemData.price = newItem.price;
-        itemData.ingredients = newItem.ingredients;
-      } else {
+      if (newItem.type === 'bebida') {
         const validSizes = newItem.sizes.filter(size => size.size.trim() && size.price > 0);
         if (validSizes.length === 0) {
           alert(`Para o tipo "${newItem.type}", adicione pelo menos um tamanho com nome e preço válidos.`);
           return;
         }
-        itemData.sizes = validSizes;
-        itemData.description = newItem.description;
+        await addBeverage({
+          name: newItem.name,
+          sizes: validSizes,
+          image: newItem.image,
+          description: newItem.description,
+        });
+      } else {
+        // Trata 'pizza', 'lanche', 'refeicao' e qualquer outro novo tipo como um item com preço único.
+        await addPizzaFlavor({
+          name: newItem.name,
+          price: newItem.price,
+          image: newItem.image,
+          ingredients: newItem.ingredients,
+          category: newItem.category,
+          type: newItem.type, // Passa o tipo do item
+        });
       }
-
-      await addPizzaFlavor(itemData);
 
       resetNewItem();
       setShowNewItemForm(false);
@@ -479,8 +501,8 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
     emoji: string,
     items: PizzaFlavor[],
     sectionKey: string,
-    handleEdit: (item: PizzaFlavor) => void,
-    handleDelete: (id: string) => void
+    handleEdit: (item: PizzaFlavor) => void, // Mantém PizzaFlavor pois é a interface base para itens de preço único
+    handleDelete: (id: string, itemType: string) => void // Modificado para aceitar o tipo do item
   ) => {
     if (items.length === 0) return null;
 
@@ -612,7 +634,7 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
                   <button
                     onClick={() => {
                       if (confirm('Tem certeza que deseja excluir este item?')) {
-                        handleDelete(item.id);
+                        handleDelete(item.id, item.type || 'pizza'); // Passa o tipo do item para a função de exclusão
                       }
                     }}
                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-red-600 border border-red-600 hover:bg-red-50 transition-colors"
@@ -707,7 +729,22 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
             <Plus className="h-5 w-5" />
             Novo Item
           </button>
-        </div>
+          <button
+            onClick={() => setShowClearMenuConfirm(true)}
+            className="flex items-center gap-2 text-white px-4 py-2 font-medium transition-colors bg-red-600 hover:bg-red-700"
+            style={{
+              borderRadius: theme.borderRadius === 'none' ? '0' :
+                           theme.borderRadius === 'sm' ? '0.125rem' :
+                           theme.borderRadius === 'md' ? '0.375rem' :
+                           theme.borderRadius === 'lg' ? '0.5rem' :
+                           theme.borderRadius === 'xl' ? '0.75rem' : '9999px',
+              fontFamily: theme.fontFamily
+            }}
+          >
+            <Trash2 className="h-5 w-5" />
+            Limpar Cardápio
+          </button>
+         </div>
       </div>
 
       {/* Botão para Gerenciar Tipos e Categorias */}
@@ -1622,6 +1659,34 @@ const MenuManagementSection: React.FC<MenuManagementSectionProps> = () => {
           onClose={() => setShowImageModal(false)}
           onImageSelect={handleImageSelect}
         />
+      )}
+
+      {/* Modal de Confirmação para Limpar Cardápio */}
+      {showClearMenuConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+            <h3 className="text-xl font-bold mb-4 text-red-700">Atenção!</h3>
+            <p className="mb-6">
+              Você tem certeza que deseja <strong>excluir TODOS os itens</strong> do seu cardápio? 
+              Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowClearMenuConfirm(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleClearMenu}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <Trash2 className="inline h-4 w-4 mr-2" />
+                Sim, Limpar Tudo
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showExcelImport && (

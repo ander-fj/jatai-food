@@ -76,6 +76,8 @@ const CustomerOrderPage: React.FC = () => {
     // Este estado será gerenciado dinamicamente
   });
   const [showCart, setShowCart] = useState(false);
+  const [showClearCartConfirm, setShowClearCartConfirm] = useState(false);
+  const [showDeleteAllMenuConfirm, setShowDeleteAllMenuConfirm] = useState(false); // Novo estado para confirmar exclusão de todo o cardápio
 
   // Estados para cupom de desconto
   const [couponCode, setCouponCode] = useState('');
@@ -95,33 +97,40 @@ const CustomerOrderPage: React.FC = () => {
   // Agrupar itens por categoria dinamicamente
   const menuSections = useMemo(() => {
     const sections = new Map<string, any[]>();
+    // Combina todos os itens do menu em uma única lista para garantir que nada seja perdido.
+    const allItems = [...pizzaFlavors, ...beverages];
     
-    // Agrupa pizzas, lanches, etc.
-    pizzaFlavors.forEach(item => {
-      // Apenas processa itens que TÊM uma categoria definida.
-      if (item.category) {
-        if (!sections.has(item.category)) {
-          sections.set(item.category, []);
-        }
-        sections.get(item.category)?.push(item);
+    allItems.forEach(item => {
+      // Define 'bebidas' para itens com esse tipo, ou usa a categoria, ou 'produtos' como fallback.
+      const category = item.type === 'bebidas' ? 'bebidas' : item.category || 'produtos';
+      
+      if (!sections.has(category)) {
+        sections.set(category, []);
       }
+      sections.get(category)?.push(item);
     });
-
-    // Adiciona as bebidas em sua própria seção
-    if (beverages.length > 0) {
-      sections.set('bebidas', beverages);
-    }
 
     return sections;
   }, [pizzaFlavors, beverages]);
 
   // Inicializa o estado das seções recolhidas
   useEffect(() => {
-    const initialCollapsedState = {};
-    menuSections.forEach((_, key) => {
-      initialCollapsedState[key] = true; // Começam recolhidas
-    });
-    setCollapsedSections(initialCollapsedState);
+    // Este useEffect agora depende de `menuSections` para garantir que ele execute
+    // quando as seções do menu forem carregadas do Firebase, mas de forma segura.
+    if (menuSections.size > 0) {
+      setCollapsedSections(prevState => {
+        const newState = { ...prevState };
+        let hasChanged = false;
+        for (const key of menuSections.keys()) {
+          if (!(key in newState)) { // Adiciona apenas se a chave da seção for nova
+            newState[key] = true; // Começa recolhida
+            hasChanged = true;
+          }
+        }
+        // Só atualiza o estado se novas seções foram adicionadas, evitando re-renderizações desnecessárias.
+        return hasChanged ? newState : prevState;
+      });
+    }
   }, [menuSections]);
 
   // Carregar cupons do Firebase
@@ -344,10 +353,14 @@ const CustomerOrderPage: React.FC = () => {
     });
   };
 
+  const clearCart = () => {
+    setCart([]);
+  };
+
   const removeFromCart = (itemId: string, size?: string, type?: string) => {
-    setCart(prev => prev.filter(item => 
-      !(item.id === itemId && item.size === size && item.type === type)
-    ));
+    setCart(prevCart =>
+      prevCart.filter(item => !(item.id === itemId && (item.size || '') === (size || '') && item.type === type))
+    );
   };
 
   const updateQuantity = (itemId: string, size: string | undefined, type: string, newQuantity: number) => {
@@ -601,39 +614,34 @@ const CustomerOrderPage: React.FC = () => {
       
       <main className="flex-1 container mx-auto px-3 sm:px-6 py-6 sm:py-12 max-w-6xl">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-4 sm:mb-6">
-          {theme.systemIcon ? (
-            <img 
-              src={theme.systemIcon} 
-              alt="Logo" 
-              className="h-10 w-10 sm:h-12 sm:w-12 rounded-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-                const fallbackIcon = document.createElement('div');
-                fallbackIcon.innerHTML = '<svg class="h-10 w-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>';
-                (e.target as HTMLImageElement).parentNode?.insertBefore(fallbackIcon, e.target);
-              }}
-            />
-          ) : (
-            <Pizza className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
-          )}
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
           <div>
             <h1 
-              className="text-lg sm:text-2xl font-bold"
+              className="text-lg sm:text-3xl font-bold"
               style={{ 
                 color: theme.textColor,
                 fontFamily: theme.fontFamily
               }}
             >
-              Pedido de {userName}
+              {storeName && <span className="text-xl sm:text-2xl font-semibold text-gray-800">{storeName}</span>}
             </h1>
             <p 
-              className="text-gray-400 text-sm sm:text-base"
+              className="text-gray-400 text-lg sm:text-x3"
               style={{ fontFamily: theme.fontFamily }}
             >
-              Escolha suas pizzas favoritas
+              Escolha os itens para o seu pedido
             </p>
           </div>
+          {cart.length > 0 && (
+            <button
+              onClick={() => setShowClearCartConfirm(true)} // Ação de limpar carrinho mantida
+              className="ml-auto flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors bg-red-100 text-red-600 hover:bg-red-200"
+              style={{ fontFamily: theme.fontFamily }}
+            >
+              <Trash2 className="h-4 w-4" />
+              Limpar Carrinho
+            </button>
+          )}
         </div>
 
         {/* Menu - Agora ocupa toda a largura */}
@@ -684,7 +692,7 @@ const CustomerOrderPage: React.FC = () => {
                   {items.map((item: any) => (
                     <div
                       key={item.id}
-                      className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-200"
+                      className="bg-white p-3 sm:p-6 shadow-sm border hover:shadow-md transition-all duration-300 animate-fade-in"
                       style={{
                         borderRadius: theme.borderRadius === 'none' ? '0' :
                                      theme.borderRadius === 'sm' ? '0.125rem' :
@@ -834,6 +842,15 @@ const CustomerOrderPage: React.FC = () => {
                   className="text-gray-500 hover:text-gray-700"
                 >
                   <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={clearCart}
+                  className="text-sm text-red-600 hover:text-red-800 flex items-center gap-1"
+                >
+                  <Trash2 className="h-4 w-4" /> Limpar Carrinho
                 </button>
               </div>
 
@@ -1112,6 +1129,34 @@ const CustomerOrderPage: React.FC = () => {
                       </div>
                     </button>
                   ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Confirmação para Limpar Carrinho */}
+        {showClearCartConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+              <h3 className="text-xl font-bold mb-4">Limpar Carrinho</h3>
+              <p className="mb-6">Tem certeza que deseja remover todos os itens do seu carrinho?</p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowClearCartConfirm(false)}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    clearCart();
+                    setShowClearCartConfirm(false);
+                    toast.info('Carrinho limpo!');
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Limpar
+                </button>
               </div>
             </div>
           </div>

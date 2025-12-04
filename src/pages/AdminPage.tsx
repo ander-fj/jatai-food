@@ -552,7 +552,7 @@ const AdminPage: React.FC = () => {
                   style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius }}
                 >
                   <Settings className="h-5 w-5" />
-                  Abrir Configurações
+                  Configurações da Loja
                 </button>
               </div>
             </div>
@@ -560,7 +560,7 @@ const AdminPage: React.FC = () => {
         </main>
 
         <footer className="bg-white border-t border-gray-200 p-3 text-center text-sm text-gray-500">
-          © {new Date().getFullYear()} Jataí Sistem Food. Todos os direitos reservados.
+          © {new Date().getFullYear()} Secontaf. Todos os direitos reservados.
         </footer>
       </div>
 

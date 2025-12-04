@@ -265,7 +265,12 @@ export const useOrders = () => {
       serviceFeeApplied,
       deliveryFeeApplied,
       trackingCode,
-      currentPosition: geo || { lat: -23.5505, lng: -46.6333 }, // fallback para São Paulo se a geocodificação falhar
+      currentPosition: geo || { 
+        // Fallback com "jitter" para evitar sobreposição de marcadores
+        // Adiciona uma pequena variação aleatória às coordenadas
+        lat: -23.5505 + (Math.random() - 0.5) * 0.01, 
+        lng: -46.6333 + (Math.random() - 0.5) * 0.01 
+      },
       createdAt: new Date().toISOString() // Data e hora atual no formato ISO
     };
 

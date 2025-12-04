@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { getTenantRef } from '../config/firebase';
+import { set, get } from 'firebase/database';
 
 interface UserData {
   isLoggedIn: boolean;
@@ -6,6 +8,7 @@ interface UserData {
   storeName: string;
   storeAddress: string;
   storePhone: string;
+  storeFooter: string; // Novo campo para o texto do rodapé
 }
 
 export const useAuth = () => {
@@ -17,6 +20,7 @@ export const useAuth = () => {
       const storeName = localStorage.getItem('storeName') || '';
       const storeAddress = localStorage.getItem('storeAddress') || '';
       const storePhone = localStorage.getItem('storePhone') || '';
+      const storeFooter = localStorage.getItem('storeFooter') || `© ${new Date().getFullYear()} Seu Restaurante. Todos os direitos reservados.`;
 
       console.log('🔍 useAuth: Inicializando com dados do localStorage', {
         loggedIn,
@@ -30,7 +34,8 @@ export const useAuth = () => {
         username: storedUsername,
         storeName: storeName,
         storeAddress: storeAddress,
-        storePhone: storePhone
+        storePhone: storePhone,
+        storeFooter: storeFooter
       };
     } catch (error) {
       console.error('❌ Erro ao inicializar useAuth:', error);
@@ -39,15 +44,66 @@ export const useAuth = () => {
         username: '',
         storeName: '',
         storeAddress: '',
-        storePhone: ''
+        storePhone: '',
+        storeFooter: '',
       };
     }
   });
 
+  const fetchStoreInfo = async (username: string) => {
+    if (!username) return;
+    try {
+      console.log(`ℹ️ Buscando informações da loja para: ${username}`);
+      const storeInfoRef = getTenantRef('info', username);
+      const snapshot = await get(storeInfoRef);
+
+      if (snapshot.exists()) {
+        const storeInfo = snapshot.val();
+        const newStoreData = {
+          storeName: storeInfo.name || '',
+          storeAddress: storeInfo.address || '',
+          storePhone: storeInfo.phone || '',
+        };
+
+        console.log('✅ Informações da loja encontradas:', newStoreData);
+
+        localStorage.setItem('storeName', newStoreData.storeName);
+        localStorage.setItem('storeAddress', newStoreData.storeAddress);
+        localStorage.setItem('storePhone', newStoreData.storePhone);
+
+        setUserData(prev => ({
+          ...prev,
+          ...newStoreData,
+        }));
+      } else {
+        console.log('⚠️ Nenhuma informação da loja encontrada no Firebase.');
+        // Se não encontrar, limpa o que tiver localmente para evitar inconsistência
+        localStorage.removeItem('storeName');
+        localStorage.removeItem('storeAddress');
+        localStorage.removeItem('storePhone');
+        setUserData(prev => ({
+            ...prev,
+            storeName: '',
+            storeAddress: '',
+            storePhone: '',
+        }));
+      }
+    } catch (error) {
+      console.error('❌ Erro ao buscar informações da loja:', error);
+    }
+  };
+
+  // Efeito para buscar dados da loja na inicialização ou no login
+  useEffect(() => {
+    if (userData.isLoggedIn && userData.username) {
+      fetchStoreInfo(userData.username);
+    }
+  }, [userData.isLoggedIn, userData.username]);
+
   // Listener para mudanças no localStorage (para sincronizar entre abas)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'isLoggedIn' || e.key === 'username') {
+      if (['isLoggedIn', 'username', 'storeName', 'storeAddress', 'storePhone', 'storeFooter'].includes(e.key || '')) {
         console.log('🔄 useAuth: Detectada mudança no localStorage');
         const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
         const username = localStorage.getItem('username') || '';
@@ -58,7 +114,8 @@ export const useAuth = () => {
             username,
             storeName: localStorage.getItem('storeName') || '',
             storeAddress: localStorage.getItem('storeAddress') || '',
-            storePhone: localStorage.getItem('storePhone') || ''
+            storePhone: localStorage.getItem('storePhone') || '',
+            storeFooter: localStorage.getItem('storeFooter') || ''
           });
         } else {
           setUserData({
@@ -66,7 +123,8 @@ export const useAuth = () => {
             username: '',
             storeName: '',
             storeAddress: '',
-            storePhone: ''
+            storePhone: '',
+            storeFooter: '',
           });
         }
       }
@@ -86,35 +144,29 @@ export const useAuth = () => {
 
       const trimmedUsername = username.trim();
       
-      // Generate store-specific data
-      const storeNumber = Math.floor(Math.random() * 100) + 1;
+      // Os dados da loja agora são gerenciados separadamente
       const newUserData = {
         isLoggedIn: true,
         username: trimmedUsername,
-        storeName: `Pizzaria Delícia #${storeNumber}`,
-        storeAddress: `Rua ${trimmedUsername.charAt(0).toUpperCase() + trimmedUsername.slice(1)}, ${storeNumber * 100}`,
-        storePhone: `(11) ${Math.floor(Math.random() * 90000) + 10000}-${Math.floor(Math.random() * 9000) + 1000}`
+        storeName: '', // Começa vazio, será preenchido pelo useEffect
+        storeAddress: '', // Começa vazio
+        storePhone: '', // Começa vazio
+        storeFooter: `© ${new Date().getFullYear()} ${trimmedUsername}. Todos os direitos reservados.` // Footer padrão
       };
 
       // Salvar no localStorage de forma síncrona
       localStorage.setItem('isLoggedIn', 'true');
       localStorage.setItem('username', trimmedUsername);
-      localStorage.setItem('storeName', newUserData.storeName);
-      localStorage.setItem('storeAddress', newUserData.storeAddress);
-      localStorage.setItem('storePhone', newUserData.storePhone);
+      // Não salvar storeName vazio aqui, deixa o fetchStoreInfo gerenciar
+      localStorage.removeItem('storeName');
+      localStorage.removeItem('storeAddress');
+      localStorage.removeItem('storePhone');
+      localStorage.setItem('storeFooter', newUserData.storeFooter);
 
-      // Atualizar estado imediatamente
+      // Atualizar estado imediatamente para disparar o useEffect
       setUserData(newUserData);
       
-      console.log(`✅ Login realizado com sucesso para: ${trimmedUsername}`, newUserData);
-      
-      // Verificar se os dados foram salvos corretamente
-      const verification = {
-        isLoggedIn: localStorage.getItem('isLoggedIn'),
-        username: localStorage.getItem('username'),
-        storeName: localStorage.getItem('storeName')
-      };
-      console.log('🔍 Verificação pós-login:', verification);
+      console.log(`✅ Login realizado com sucesso para: ${trimmedUsername}`);
       
       return newUserData;
     } catch (error) {
@@ -132,6 +184,7 @@ export const useAuth = () => {
     localStorage.removeItem('storeName');
     localStorage.removeItem('storeAddress');
     localStorage.removeItem('storePhone');
+    localStorage.removeItem('storeFooter');
 
     // Atualizar estado
     setUserData({
@@ -139,10 +192,45 @@ export const useAuth = () => {
       username: '',
       storeName: '',
       storeAddress: '',
-      storePhone: ''
+      storePhone: '',
+      storeFooter: '',
     });
     
     console.log('✅ Logout realizado com sucesso');
+  };
+
+  const updateStoreInfo = async (newInfo: { storeName: string; storeAddress: string; storePhone: string }) => {
+    try {
+      console.log('🔄 Atualizando informações da loja:', newInfo);
+  
+      // Salvar no Firebase
+      const storeInfoRef = getTenantRef('config/storeInfo');
+      await set(storeInfoRef, {
+        name: newInfo.storeName,
+        address: newInfo.storeAddress,
+        phone: newInfo.storePhone,
+        updatedAt: new Date().toISOString(),
+      });
+  
+      // Salvar no localStorage
+      localStorage.setItem('storeName', newInfo.storeName);
+      localStorage.setItem('storeAddress', newInfo.storeAddress);
+      localStorage.setItem('storePhone', newInfo.storePhone);
+  
+      // Atualizar estado
+      setUserData(prev => ({
+        ...prev,
+        storeName: newInfo.storeName,
+        storeAddress: newInfo.storeAddress,
+        storePhone: newInfo.storePhone,
+      }));
+  
+      console.log('✅ Informações da loja atualizadas com sucesso no Firebase e localStorage.');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar informações da loja:', error);
+      // Re-lançar o erro para que o chamador (modal) possa tratá-lo
+      throw error;
+    }
   };
 
   // Função para verificar se está realmente autenticado
@@ -166,6 +254,7 @@ export const useAuth = () => {
     ...userData, 
     login, 
     logout, 
-    isAuthenticated 
+    isAuthenticated,
+    updateStoreInfo // Exporta a nova função
   };
 };

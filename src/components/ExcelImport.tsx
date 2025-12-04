@@ -137,7 +137,8 @@ const ExcelImport: React.FC<ExcelImportProps> = ({ onClose }) => {
             price: parseFloat(preco) || 0,
             image: processedImageUrl,
             ingredients: descricao?.toString() || '',
-            category: categoria?.toString() || 'salgada'
+            category: categoria?.toString() || 'salgada',
+            type: tipo.toString().toLowerCase() // Passa o tipo do item
           });
           pizzasAdded++;
         } else if (tipo.toString().toLowerCase() === 'bebida') {
