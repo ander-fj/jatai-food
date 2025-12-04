@@ -13,6 +13,7 @@ const Header: React.FC = () => {
   const { theme, iconProps } = useTheme();
   const location = useLocation();
   const isAdminPage = location.pathname.includes('/admin');
+  const isOrderPage = location.pathname.startsWith('/pedido');
 
   // Debug para verificar estado de autenticação
   console.log('🔍 Header: Estado de autenticação', {
@@ -63,7 +64,7 @@ const Header: React.FC = () => {
           {/* Botões e Informações do Usuário */}
           <div className="flex items-center gap-4">
             
-            {!isAdminPage && (
+            {!isAdminPage && !isOrderPage && (
               <button 
                 onClick={() => setShowLoginModal(true)}
                 className="flex items-center gap-2 bg-black bg-opacity-20 hover:bg-opacity-30 px-3 py-2 rounded-md transition-colors"
