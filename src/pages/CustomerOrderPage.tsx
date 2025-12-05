@@ -616,15 +616,7 @@ const CustomerOrderPage: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <div>
-            <h1 
-              className="text-lg sm:text-3xl font-bold"
-              style={{ 
-                color: theme.textColor,
-                fontFamily: theme.fontFamily
-              }}
-            >
-              {storeName && <span className="text-xl sm:text-2xl font-semibold text-gray-800">{storeName}</span>}
-            </h1>
+
             <p 
               className="text-gray-400 text-lg sm:text-x3"
               style={{ fontFamily: theme.fontFamily }}

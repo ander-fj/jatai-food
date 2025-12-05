@@ -20,7 +20,7 @@ export const useAuth = () => {
       const storeName = localStorage.getItem('storeName') || '';
       const storeAddress = localStorage.getItem('storeAddress') || '';
       const storePhone = localStorage.getItem('storePhone') || '';
-      const storeFooter = localStorage.getItem('storeFooter') || `© ${new Date().getFullYear()} Seu Restaurante. Todos os direitos reservados.`;
+      const storeFooter = localStorage.getItem('storeFooter') || `© ${new Date().getFullYear()} Secontaf. Todos os direitos reservados.`;
 
       console.log('🔍 useAuth: Inicializando com dados do localStorage', {
         loggedIn,

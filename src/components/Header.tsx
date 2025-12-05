@@ -15,6 +15,9 @@ const Header: React.FC = () => {
   const isAdminPage = location.pathname.includes('/admin');
   const isOrderPage = location.pathname.startsWith('/pedido');
 
+  // Remove o prefixo "Pizzaria Delícia - " do nome do restaurante
+  const displayName = restaurantName?.replace("Pizzaria Delícia - ", "") || "";
+
   // Debug para verificar estado de autenticação
   console.log('🔍 Header: Estado de autenticação', {
     isLoggedIn,
@@ -58,7 +61,7 @@ const Header: React.FC = () => {
 
           {/* Nome do Restaurante - Centralizado */}
           <div className="flex-grow text-center">
-            <span className="text-5xl font-bold text-white">{restaurantName}</span>
+            <span className="text-5xl font-bold text-white">{displayName}</span>
           </div>
 
           {/* Botões e Informações do Usuário */}
