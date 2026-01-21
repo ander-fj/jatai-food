@@ -419,14 +419,6 @@ const AdminPage: React.FC = () => {
             {!isSidebarCollapsed && <span>Página de Pedidos</span>}
           </a>
         </nav>
-        <div className="px-2 py-2 border-t border-gray-700">
-            <button 
-              onClick={handleLogout} 
-              className="flex w-full items-center gap-2 hover:bg-gray-700 px-3 py-2 rounded-md transition-colors"
-            > <LogOut className={`h-5 w-5 ${isSidebarCollapsed ? '' : 'mr-3'}`} {...iconProps}/>
-              {!isSidebarCollapsed && <span>Sair</span>}
-            </button>
-        </div>
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -486,6 +478,15 @@ const AdminPage: React.FC = () => {
                     Desenhar Área
                   </button>
                 )}
+                {/* Botão Sair movido para o canto superior direito */}
+                <button 
+                  onClick={handleLogout} 
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+                  title="Sair"
+                >
+                  <LogOut className="h-5 w-5" {...iconProps}/>
+                  <span className="hidden md:inline">Sair</span>
+                </button>
               </div>
             </div>
           </div>
