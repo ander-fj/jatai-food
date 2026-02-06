@@ -1,0 +1,51 @@
+# Node
+node_modules/
+server/node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Build
+dist/
+build/
+.vercel/
+
+# Environment
+.env
+server/.env
+*.env
+
+# VSCode
+.vscode/
+
+# Logs
+*.log
+server.log
+
+# WhatsApp Web JS Auth (NUNCA ENVIAR!)
+server/.wwebjs_auth/
+server/.wwebjs_cache/
+server/whatsapp-sessions/
+server/session-*/
+
+# Puppeteer/Chrome garbage
+**/Default/
+**/IndexedDB/
+**/Cache/
+**/Service Worker/
+**/GPUCache/
+**/Code Cache/
+**/leveldb/
+**/Local Storage/
+
+# Firebase PRIVATE keys (NUNCA subir!)
+firebase-adminsdk.json
+firebase-credentials.json
+
+# Lockfiles redundantes
+package-lock.json
+yarn.lock
+
+node_modules
+.env
+dist
